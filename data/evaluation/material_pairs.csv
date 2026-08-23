@@ -1,0 +1,38 @@
+pair_id,record_a_code,record_b_code,record_a_cpse,record_b_cpse,category,label,difference_reason,record_a_ground_truth_material_id,record_b_ground_truth_material_id
+PAIR-001,CP-VAL-001-1,IO-VAL-001-2,CPCL,IOCL,Valve,SAME,same canonical material,VAL-001,VAL-001
+PAIR-002,CP-VAL-002-1,NT-VAL-002-3,CPCL,NTPC,Valve,SAME,same canonical material,VAL-002,VAL-002
+PAIR-003,IO-VAL-003-2,NT-VAL-003-3,IOCL,NTPC,Valve,SAME,same canonical material,VAL-003,VAL-003
+PAIR-004,CP-VAL-004-1,IO-VAL-004-2,CPCL,IOCL,Valve,SAME,same canonical material,VAL-004,VAL-004
+PAIR-005,CP-VAL-005-1,NT-VAL-005-3,CPCL,NTPC,Valve,SAME,same canonical material,VAL-005,VAL-005
+PAIR-006,IO-VAL-006-2,NT-VAL-006-3,IOCL,NTPC,Valve,SAME,same canonical material,VAL-006,VAL-006
+PAIR-007,CP-VAL-007-1,IO-VAL-007-2,CPCL,IOCL,Valve,SAME,same canonical material,VAL-007,VAL-007
+PAIR-008,CP-VAL-008-1,NT-VAL-008-3,CPCL,NTPC,Valve,SAME,same canonical material,VAL-008,VAL-008
+PAIR-009,IO-BEA-009-2,NT-BEA-009-3,IOCL,NTPC,Bearing,SAME,same canonical material,BRG-001,BRG-001
+PAIR-010,CP-BEA-010-1,IO-BEA-010-2,CPCL,IOCL,Bearing,SAME,same canonical material,BRG-002,BRG-002
+PAIR-011,CP-BEA-011-1,NT-BEA-011-3,CPCL,NTPC,Bearing,SAME,same canonical material,BRG-003,BRG-003
+PAIR-012,IO-BEA-012-2,NT-BEA-012-3,IOCL,NTPC,Bearing,SAME,same canonical material,BRG-004,BRG-004
+PAIR-013,CP-BEA-013-1,IO-BEA-013-2,CPCL,IOCL,Bearing,SAME,same canonical material,BRG-005,BRG-005
+PAIR-014,CP-BEA-014-1,NT-BEA-014-3,CPCL,NTPC,Bearing,SAME,same canonical material,BRG-006,BRG-006
+PAIR-015,IO-PIP-015-2,NT-PIP-015-3,IOCL,NTPC,Pipe,SAME,same canonical material,PIP-001,PIP-001
+PAIR-016,CP-PIP-016-1,IO-PIP-016-2,CPCL,IOCL,Pipe,SAME,same canonical material,PIP-002,PIP-002
+PAIR-017,CP-PIP-017-1,NT-PIP-017-3,CPCL,NTPC,Pipe,SAME,same canonical material,PIP-003,PIP-003
+PAIR-018,IO-PIP-018-2,NT-PIP-018-3,IOCL,NTPC,Pipe,SAME,same canonical material,PIP-004,PIP-004
+PAIR-019,CP-PIP-019-1,IO-PIP-019-2,CPCL,IOCL,Pipe,SAME,same canonical material,PIP-005,PIP-005
+PAIR-020,CP-PIP-020-1,NT-PIP-020-3,CPCL,NTPC,Pipe,SAME,same canonical material,PIP-006,PIP-006
+PAIR-021,IO-PIP-021-2,NT-PIP-021-3,IOCL,NTPC,Pipe,SAME,same canonical material,PIP-007,PIP-007
+PAIR-022,CP-VAL-001-1,CP-VAL-DUP-01,CPCL,CPCL,Valve,SAME,same material; same-CPSE legacy duplicate,VAL-001,VAL-001
+PAIR-023,IO-VAL-004-2,IO-VAL-DUP-02,IOCL,IOCL,Valve,SAME,same material; same-CPSE legacy duplicate,VAL-004,VAL-004
+PAIR-024,IO-BEA-009-2,IO-BEA-DUP-03,IOCL,IOCL,Bearing,SAME,same material; same-CPSE legacy duplicate,BRG-001,BRG-001
+PAIR-025,NT-BEA-012-3,NT-BEA-DUP-04,NTPC,NTPC,Bearing,SAME,same material; same-CPSE legacy duplicate,BRG-004,BRG-004
+PAIR-026,NT-PIP-015-3,NT-PIP-DUP-05,NTPC,NTPC,Pipe,SAME,same material; same-CPSE legacy duplicate,PIP-001,PIP-001
+PAIR-027,CP-PIP-017-1,CP-PIP-DUP-06,CPCL,CPCL,Pipe,SAME,same material; same-CPSE legacy duplicate,PIP-003,PIP-003
+PAIR-028,NT-VAL-001-3,NT-VAL-002-3,NTPC,NTPC,Valve,DIFFERENT,pressure class differs,VAL-001,VAL-002
+PAIR-029,CP-VAL-001-1,CP-VAL-003-1,CPCL,CPCL,Valve,DIFFERENT,nominal valve size differs,VAL-001,VAL-003
+PAIR-030,IO-VAL-005-2,NT-VAL-007-3,IOCL,NTPC,Valve,DIFFERENT,pressure class and end connection differ,VAL-005,VAL-007
+PAIR-031,NT-VAL-006-3,CP-VAL-008-1,NTPC,CPCL,Valve,DIFFERENT,"valve type, material, size, and end connection differ",VAL-006,VAL-008
+PAIR-032,NT-PIP-015-3,NT-PIP-016-3,NTPC,NTPC,Pipe,DIFFERENT,pipe wall thickness and schedule differ,PIP-001,PIP-002
+PAIR-033,IO-PIP-015-2,CP-PIP-018-1,IOCL,CPCL,Pipe,DIFFERENT,pipe outside diameter differs,PIP-001,PIP-004
+PAIR-034,CP-PIP-017-1,NT-PIP-020-3,CPCL,NTPC,Pipe,DIFFERENT,"pipe material, diameter, and thickness differ",PIP-003,PIP-006
+PAIR-035,IO-BEA-009-2,IO-BEA-012-2,IOCL,IOCL,Bearing,DIFFERENT,bearing width differs,BRG-001,BRG-004
+PAIR-036,IO-BEA-009-2,CP-BEA-010-1,IOCL,CPCL,Bearing,DIFFERENT,bearing dimensions differ,BRG-001,BRG-002
+PAIR-037,NT-BEA-011-3,IO-BEA-013-2,NTPC,IOCL,Bearing,DIFFERENT,bearing family and dimensions differ,BRG-003,BRG-005

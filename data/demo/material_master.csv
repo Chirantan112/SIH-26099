@@ -1,0 +1,70 @@
+cpse,legacy_material_code,raw_description,category,ground_truth_material_id,valve_type,material,pressure_class,end_connection,size_mm,bearing_family,bearing_inner_diameter_mm,bearing_outer_diameter_mm,bearing_width_mm,pipe_material,pipe_od_mm,pipe_thickness_mm,pipe_schedule,pipe_end
+CPCL,CP-VAL-001-1,"50 mm Carbon Steel gate valve, class 150 FLANGED",Valve,VAL-001,Gate,Carbon Steel,150,Flanged,50,,,,,,,,,
+IOCL,IO-VAL-001-2,CS GATE VALVE 50 MM 150# FLG,Valve,VAL-001,Gate,Carbon Steel,150,Flanged,50,,,,,,,,,
+NTPC,NT-VAL-001-3,VALVE-GATE; CS; FLANGED; 50 mm; CL 150,Valve,VAL-001,Gate,Carbon Steel,150,Flanged,50,,,,,,,,,
+CPCL,CP-VAL-002-1,GATE VLV CS CL300 FLG 50MM,Valve,VAL-002,Gate,Carbon Steel,300,Flanged,50,,,,,,,,,
+IOCL,IO-VAL-002-2,CS GATE VALVE 50 MM 300# FLG,Valve,VAL-002,Gate,Carbon Steel,300,Flanged,50,,,,,,,,,
+NTPC,NT-VAL-002-3,"50 mm Carbon Steel gate valve, class 300 FLANGED",Valve,VAL-002,Gate,Carbon Steel,300,Flanged,50,,,,,,,,,
+CPCL,CP-VAL-003-1,GATE VLV CS CL150 FLG 80MM,Valve,VAL-003,Gate,Carbon Steel,150,Flanged,80,,,,,,,,,
+IOCL,IO-VAL-003-2,CS GATE VALVE 80 MM 150# FLG,Valve,VAL-003,Gate,Carbon Steel,150,Flanged,80,,,,,,,,,
+NTPC,NT-VAL-003-3,VALVE-GATE; CS; FLANGED; 80 mm; CL 150,Valve,VAL-003,Gate,Carbon Steel,150,Flanged,80,,,,,,,,,
+CPCL,CP-VAL-004-1,SS GLOBE VALVE 50 MM 150# FLG,Valve,VAL-004,Globe,Stainless Steel,150,Flanged,50,,,,,,,,,
+IOCL,IO-VAL-004-2,"50 mm Stainless Steel globe valve, class 150 FLANGED",Valve,VAL-004,Globe,Stainless Steel,150,Flanged,50,,,,,,,,,
+NTPC,NT-VAL-004-3,SS GLOBE VALVE 50 MM 150# FLG,Valve,VAL-004,Globe,Stainless Steel,150,Flanged,50,,,,,,,,,
+CPCL,CP-VAL-005-1,SS BALL VALVE 25 MM 300# FLG,Valve,VAL-005,Ball,Stainless Steel,300,Flanged,25,,,,,,,,,
+IOCL,IO-VAL-005-2,BALL VLV SS CL300 FLG 25MM,Valve,VAL-005,Ball,Stainless Steel,300,Flanged,25,,,,,,,,,
+NTPC,NT-VAL-005-3,"25 mm Stainless Steel ball valve, class 300 FLANGED",Valve,VAL-005,Ball,Stainless Steel,300,Flanged,25,,,,,,,,,
+CPCL,CP-VAL-006-1,CS CHECK VALVE 100 MM 150# FLG,Valve,VAL-006,Check,Carbon Steel,150,Flanged,100,,,,,,,,,
+IOCL,IO-VAL-006-2,VALVE-CHECK; CS; FLANGED; 100 mm; CL 150,Valve,VAL-006,Check,Carbon Steel,150,Flanged,100,,,,,,,,,
+NTPC,NT-VAL-006-3,VALVE-CHECK; CS; FLANGED; 100 mm; CL 150,Valve,VAL-006,Check,Carbon Steel,150,Flanged,100,,,,,,,,,
+CPCL,CP-VAL-007-1,SS BALL VALVE 25 MM 150# THD,Valve,VAL-007,Ball,Stainless Steel,150,Threaded,25,,,,,,,,,
+IOCL,IO-VAL-007-2,VALVE-BALL; SS; THREADED; 25 mm; CL 150,Valve,VAL-007,Ball,Stainless Steel,150,Threaded,25,,,,,,,,,
+NTPC,NT-VAL-007-3,"25 mm Stainless Steel ball valve, class 150 THREADED",Valve,VAL-007,Ball,Stainless Steel,150,Threaded,25,,,,,,,,,
+CPCL,CP-VAL-008-1,CI BUTTERFLY VALVE 150 MM 150# WFR,Valve,VAL-008,Butterfly,Cast Iron,150,Wafer,150,,,,,,,,,
+IOCL,IO-VAL-008-2,VALVE-BUTTERFLY; CI; WAFER; 150 mm; CL 150,Valve,VAL-008,Butterfly,Cast Iron,150,Wafer,150,,,,,,,,,
+NTPC,NT-VAL-008-3,BUTTERFLY VLV CI CL150 WFR 150MM,Valve,VAL-008,Butterfly,Cast Iron,150,Wafer,150,,,,,,,,,
+CPCL,CP-BEA-009-1,DEEP GROOVE BALL BEARING 20x47x14 MM,Bearing,BRG-001,,,,,,Deep Groove Ball,20,47,14,,,,,
+IOCL,IO-BEA-009-2,"DEEP GROOVE BLL BRG, 20x47x14mm",Bearing,BRG-001,,,,,,Deep Groove Ball,20,47,14,,,,,
+NTPC,NT-BEA-009-3,"DEEP GROOVE BLL BRG, 20x47x14mm",Bearing,BRG-001,,,,,,Deep Groove Ball,20,47,14,,,,,
+CPCL,CP-BEA-010-1,25x52x15 mm deep groove ball BRG,Bearing,BRG-002,,,,,,Deep Groove Ball,25,52,15,,,,,
+IOCL,IO-BEA-010-2,BRG DEEP GROOVE BALL 25 X 52 X 15,Bearing,BRG-002,,,,,,Deep Groove Ball,25,52,15,,,,,
+NTPC,NT-BEA-010-3,DEEP GROOVE BALL BEARING 25x52x15 MM,Bearing,BRG-002,,,,,,Deep Groove Ball,25,52,15,,,,,
+CPCL,CP-BEA-011-1,"TAPER ROLLER BRG, 30x62x17mm",Bearing,BRG-003,,,,,,Taper Roller,30,62,17,,,,,
+IOCL,IO-BEA-011-2,30x62x17 mm taper roller BRG,Bearing,BRG-003,,,,,,Taper Roller,30,62,17,,,,,
+NTPC,NT-BEA-011-3,"TAPER ROLLER BRG, 30x62x17mm",Bearing,BRG-003,,,,,,Taper Roller,30,62,17,,,,,
+CPCL,CP-BEA-012-1,20x47x12 mm deep groove ball BRG,Bearing,BRG-004,,,,,,Deep Groove Ball,20,47,12,,,,,
+IOCL,IO-BEA-012-2,20x47x12 mm deep groove ball BRG,Bearing,BRG-004,,,,,,Deep Groove Ball,20,47,12,,,,,
+NTPC,NT-BEA-012-3,DEEP GROOVE BALL BEARING 20x47x12 MM,Bearing,BRG-004,,,,,,Deep Groove Ball,20,47,12,,,,,
+CPCL,CP-BEA-013-1,BRG SPHERICAL ROLLER 50 X 110 X 27,Bearing,BRG-005,,,,,,Spherical Roller,50,110,27,,,,,
+IOCL,IO-BEA-013-2,BRG SPHERICAL ROLLER 50 X 110 X 27,Bearing,BRG-005,,,,,,Spherical Roller,50,110,27,,,,,
+NTPC,NT-BEA-013-3,50x110x27 mm spherical roller BRG,Bearing,BRG-005,,,,,,Spherical Roller,50,110,27,,,,,
+CPCL,CP-BEA-014-1,BRG NEEDLE ROLLER 25 X 32 X 20,Bearing,BRG-006,,,,,,Needle Roller,25,32,20,,,,,
+IOCL,IO-BEA-014-2,BRG NEEDLE ROLLER 25 X 32 X 20,Bearing,BRG-006,,,,,,Needle Roller,25,32,20,,,,,
+NTPC,NT-BEA-014-3,NEEDLE ROLLER BEARING 25x32x20 MM,Bearing,BRG-006,,,,,,Needle Roller,25,32,20,,,,,
+CPCL,CP-PIP-015-1,"Carbon Steel pipe 60.3mm x 3.91 mm, schedule 40, PLAIN",Pipe,PIP-001,,,,,,,,,,Carbon Steel,60.3,3.91,40,Plain
+IOCL,IO-PIP-015-2,PIPE CS OD 60.3 MM THK 3.91 MM SCH 40 PLAIN END,Pipe,PIP-001,,,,,,,,,,Carbon Steel,60.3,3.91,40,Plain
+NTPC,NT-PIP-015-3,SCH 40; CS; PIPE 60.3mm/3.91mm; PE,Pipe,PIP-001,,,,,,,,,,Carbon Steel,60.3,3.91,40,Plain
+CPCL,CP-PIP-016-1,CS PIPE 60.3 MM OD X 5.54MM SCH-80,Pipe,PIP-002,,,,,,,,,,Carbon Steel,60.3,5.54,80,Plain
+IOCL,IO-PIP-016-2,PIPE CS OD 60.3 MM THK 5.54 MM SCH 80 PLAIN END,Pipe,PIP-002,,,,,,,,,,Carbon Steel,60.3,5.54,80,Plain
+NTPC,NT-PIP-016-3,"Carbon Steel pipe 60.3mm x 5.54 mm, schedule 80, PLAIN",Pipe,PIP-002,,,,,,,,,,Carbon Steel,60.3,5.54,80,Plain
+CPCL,CP-PIP-017-1,PIPE SS 304 OD 60.3 MM THK 3.91 MM SCH 40 BEVELLED END,Pipe,PIP-003,,,,,,,,,,Stainless Steel 304,60.3,3.91,40,Bevelled
+IOCL,IO-PIP-017-2,SCH 40; SS 304; PIPE 60.3mm/3.91mm; BE,Pipe,PIP-003,,,,,,,,,,Stainless Steel 304,60.3,3.91,40,Bevelled
+NTPC,NT-PIP-017-3,"Stainless Steel 304 pipe 60.3mm x 3.91 mm, schedule 40, BEVELLED",Pipe,PIP-003,,,,,,,,,,Stainless Steel 304,60.3,3.91,40,Bevelled
+CPCL,CP-PIP-018-1,SCH 40; CS; PIPE 88.9mm/5.49mm; PE,Pipe,PIP-004,,,,,,,,,,Carbon Steel,88.9,5.49,40,Plain
+IOCL,IO-PIP-018-2,"Carbon Steel pipe 88.9mm x 5.49 mm, schedule 40, PLAIN",Pipe,PIP-004,,,,,,,,,,Carbon Steel,88.9,5.49,40,Plain
+NTPC,NT-PIP-018-3,SCH 40; CS; PIPE 88.9mm/5.49mm; PE,Pipe,PIP-004,,,,,,,,,,Carbon Steel,88.9,5.49,40,Plain
+CPCL,CP-PIP-019-1,SCH 40; CS; PIPE 114.3mm/6.02mm; BE,Pipe,PIP-005,,,,,,,,,,Carbon Steel,114.3,6.02,40,Bevelled
+IOCL,IO-PIP-019-2,CS PIPE 114.3 MM OD X 6.02MM SCH-40,Pipe,PIP-005,,,,,,,,,,Carbon Steel,114.3,6.02,40,Bevelled
+NTPC,NT-PIP-019-3,"Carbon Steel pipe 114.3mm x 6.02 mm, schedule 40, BEVELLED",Pipe,PIP-005,,,,,,,,,,Carbon Steel,114.3,6.02,40,Bevelled
+CPCL,CP-PIP-020-1,PIPE SS316 OD 33.4 MM THK 3.38 MM SCH 40 PLAIN END,Pipe,PIP-006,,,,,,,,,,Stainless Steel 316,33.4,3.38,40,Plain
+IOCL,IO-PIP-020-2,PIPE SS316 OD 33.4 MM THK 3.38 MM SCH 40 PLAIN END,Pipe,PIP-006,,,,,,,,,,Stainless Steel 316,33.4,3.38,40,Plain
+NTPC,NT-PIP-020-3,"Stainless Steel 316 pipe 33.4mm x 3.38 mm, schedule 40, PLAIN",Pipe,PIP-006,,,,,,,,,,Stainless Steel 316,33.4,3.38,40,Plain
+CPCL,CP-PIP-021-1,PIPE CS OD 48.3 MM THK 3.68 MM SCH 40 THREADED END,Pipe,PIP-007,,,,,,,,,,Carbon Steel,48.3,3.68,40,Threaded
+IOCL,IO-PIP-021-2,SCH 40; CS; PIPE 48.3mm/3.68mm; THD,Pipe,PIP-007,,,,,,,,,,Carbon Steel,48.3,3.68,40,Threaded
+NTPC,NT-PIP-021-3,SCH 40; CS; PIPE 48.3mm/3.68mm; THD,Pipe,PIP-007,,,,,,,,,,Carbon Steel,48.3,3.68,40,Threaded
+CPCL,CP-VAL-DUP-01,CS GATE VALVE 50 MM 150# FLG,Valve,VAL-001,Gate,Carbon Steel,150,Flanged,50,,,,,,,,,
+IOCL,IO-VAL-DUP-02,GLOBE VLV SS CL150 FLG 50MM,Valve,VAL-004,Globe,Stainless Steel,150,Flanged,50,,,,,,,,,
+IOCL,IO-BEA-DUP-03,DEEP GROOVE BALL BEARING 20x47x14 MM,Bearing,BRG-001,,,,,,Deep Groove Ball,20,47,14,,,,,
+NTPC,NT-BEA-DUP-04,BRG DEEP GROOVE BALL 20 X 47 X 12,Bearing,BRG-004,,,,,,Deep Groove Ball,20,47,12,,,,,
+NTPC,NT-PIP-DUP-05,PIPE CS OD 60.3 MM THK 3.91 MM SCH 40 PLAIN END,Pipe,PIP-001,,,,,,,,,,Carbon Steel,60.3,3.91,40,Plain
+CPCL,CP-PIP-DUP-06,SS 304 PIPE 60.3 MM OD X 3.91MM SCH-40,Pipe,PIP-003,,,,,,,,,,Stainless Steel 304,60.3,3.91,40,Bevelled
