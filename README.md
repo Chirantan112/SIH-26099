@@ -1,8 +1,8 @@
 # SIH-26099 — CPSE Material Code Harmonization
 
-This repository starts with **Module 1 only**: a reproducible, synthetic CPSE material-master dataset and labelled evaluation pairs for SIH 2026 Problem Statement 26099, *AI-Driven Standardization and Harmonization of Material Codes Across CPSEs*.
+This repository contains a reproducible, synthetic CPSE material-master dataset, labelled evaluation pairs, and **LEGO #2** deterministic material-description normalization for SIH 2026 Problem Statement 26099, *AI-Driven Standardization and Harmonization of Material Codes Across CPSEs*.
 
-No frontend, API, database, ERP integration, normalization, matching, embeddings, LLMs, or machine-learning dependencies are included.
+LEGO #2 performs deterministic text normalization only. It does not perform semantic matching, duplicate detection, similarity scoring, embeddings, LLM calls, database or API operations, SAP/ERP integration, or frontend work.
 
 ## Quick start
 

@@ -30,4 +30,4 @@ Description renderers intentionally vary abbreviations, synonyms, word order, ca
 
 This is synthetic data designed for development and evaluation. It is not drawn from CPSE systems, does not represent real CPSE procurement data or statistics, and cannot establish real-world matching accuracy. Its modest size and controlled variation make it suitable for transparent fixture-based tests, not production validation.
 
-This module deliberately does not interpret, normalize, or match these descriptions.
+LEGO #2 can deterministically normalize description text while preserving controlled technical groups. It does not perform semantic matching, duplicate detection, similarity scoring, embeddings, LLM calls, database/API operations, SAP integration, or frontend work.
