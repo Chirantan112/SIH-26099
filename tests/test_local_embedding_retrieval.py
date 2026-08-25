@@ -41,7 +41,6 @@ class LocalEmbeddingRetrievalTests(unittest.TestCase):
         self.query = "query text"
 
     def test_module_imports_without_optional_dependencies(self):
-        # Import succeeded without importing either optional package.
         self.assertEqual(DEFAULT_MODEL_NAME, "sentence-transformers/all-MiniLM-L6-v2")
 
     def test_status_does_not_load_model(self):
@@ -51,23 +50,26 @@ class LocalEmbeddingRetrievalTests(unittest.TestCase):
         self.assertEqual(loader.calls, 0)
 
     def test_lazy_model_loading(self):
-        model = FakeModel({self.query: [1.0, 0.0], **{f"canonical_material_id=MAT-{i:02d} attributes=<object object at 0x0>": [1.0, 0.0] for i in range(1, 9)}})
-        # Use the adapter's own catalog text helper to avoid duplicating its representation.
         embeddings = {self.query: [1.0, 0.0]}
         for record in self.catalog:
             embeddings[adapter_text(record)] = [1.0, 0.0]
-        model = FakeModel(embeddings)
-        loader = FakeLoader(model)
+        loader = FakeLoader(FakeModel(embeddings))
         adapter = LocalEmbeddingRetrievalAdapter(model_loader=loader)
         self.assertEqual(loader.calls, 0)
         adapter.retrieve(self.query, self.query, object(), self.catalog)
         self.assertEqual(loader.calls, 1)
 
+    def test_catalog_embedding_text_excludes_identity_labels(self):
+        for record in self.catalog:
+            text = adapter_text(record)
+            self.assertNotIn(record.canonical_material_id, text)
+            self.assertNotIn("canonical_material_id", text)
+            self.assertNotIn("legacy_material_code", text)
+            self.assertNotIn("ground_truth", text)
+
     def test_missing_dependency_behavior(self):
         adapter = LocalEmbeddingRetrievalAdapter(model_loader=None)
         status = adapter.status()
-        # The real environment may have the optional package; the key invariant is that
-        # status is safe and retrieval cannot raise if the loader cannot be used.
         self.assertIsInstance(status, AdapterStatus)
         if not status.available:
             self.assertEqual(adapter.retrieve(self.query, self.query, object(), self.catalog), ())
@@ -173,7 +175,7 @@ class LocalEmbeddingRetrievalTests(unittest.TestCase):
 
 
 def adapter_text(record: CatalogRecord) -> str:
-    """Mirror only the adapter's stable catalog-text helper for fake-model keys."""
+    """Use the adapter helper so fake-model keys match the production input exactly."""
     return LocalEmbeddingRetrievalAdapter._catalog_text(record)
 
 
