@@ -167,8 +167,7 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
 
     @staticmethod
     def _catalog_text(record: Any) -> str:
-        """Build a stable embedding input from catalog data without reimplementing extraction."""
-        material_id = str(record.canonical_material_id)
+        """Build embedding input from supplied descriptive/technical attributes only."""
         attributes = getattr(record, "attributes", None)
         if is_dataclass(attributes):
             parts = []
@@ -176,5 +175,5 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
                 value = getattr(attributes, field.name)
                 if value is not None and str(value).strip():
                     parts.append(f"{field.name}={value}")
-            return f"canonical_material_id={material_id} " + " ".join(parts)
-        return f"canonical_material_id={material_id} attributes={attributes!r}"
+            return " ".join(parts)
+        return f"attributes={attributes!r}"
