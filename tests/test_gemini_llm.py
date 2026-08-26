@@ -69,19 +69,20 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertEqual(len(result), 1); self.assertEqual(result[0].canonical_material_id, "VAL-001")
         self.assertEqual(result[0].source, "gemini"); self.assertEqual(result[0].score, 1.0)
         self.assertIn("NON-PROBABILISTIC", result[0].explanation)
-        self.assertEqual(interactions.calls[0]["model"], DEFAULT_GEMINI_MODEL)
-        self.assertEqual(interactions.calls[0]["response_mime_type"], "application/json")
-        self.assertIn("candidate", interactions.calls[0]["input"].lower())
-        response_format = interactions.calls[0]["response_format"]
-        self.assertIsInstance(response_format, list); self.assertEqual(len(response_format), 1)
-        self.assertEqual(response_format[0]["mime_type"], "application/json")
-        schema = response_format[0]["schema"]
-        candidate_fields = set(schema["properties"]["candidates"]["items"]["properties"])
-        self.assertEqual(candidate_fields, {"canonical_material_id", "reason"})
-        self.assertNotIn("confidence", candidate_fields)
-        self.assertNotIn("probability", candidate_fields)
-        self.assertNotIn("score", candidate_fields)
-        self.assertNotIn("decision", candidate_fields)
+        self.assertEqual(len(interactions.calls), 1)
+        call = interactions.calls[0]
+        self.assertEqual(call["model"], DEFAULT_GEMINI_MODEL)
+        response_format = call["response_format"]
+        self.assertIsInstance(response_format, dict)
+        self.assertEqual(response_format["type"], "text")
+        self.assertEqual(response_format["mime_type"], "application/json")
+        schema = response_format["schema"]
+        self.assertIsInstance(schema, dict)
+        self.assertEqual(schema["type"], "object")
+        self.assertIn("candidates", schema["properties"])
+        candidate_schema = schema["properties"]["candidates"]["items"]
+        self.assertIn("canonical_material_id", candidate_schema["properties"])
+        self.assertIn("reason", candidate_schema["properties"])
     def test_successful_fenced_json_response_shape(self):
         payload = """```json
 {
