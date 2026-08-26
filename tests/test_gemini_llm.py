@@ -76,6 +76,20 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertNotIn("probability", candidate_fields)
         self.assertNotIn("score", candidate_fields)
         self.assertNotIn("decision", candidate_fields)
+    def test_successful_fenced_json_response_shape(self):
+        payload = """```json
+{
+  "candidates": [
+    {
+      "canonical_material_id": "VAL-001",
+      "reason": "It is a gate valve."
+    }
+  ]
+}
+```"""
+        adapter, _ = self._adapter(payload)
+        result = adapter.interpret("CS GATE VLV 50MM FLG CL150", "CS GATE VLV 50MM FLG CL150", object(), CATALOG)
+        self.assertEqual([(item.canonical_material_id, item.explanation.split(" [Advisory")[0]) for item in result], [("VAL-001", "It is a gate valve.")])
     def test_unknown_catalog_ids_are_rejected(self):
         adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"NOT-IN-CATALOG","reason":"Nope"},{"canonical_material_id":"VAL-001","reason":"Known"}]}')
         self.assertEqual([x.canonical_material_id for x in adapter.interpret("desc", "desc", object(), CATALOG)], ["VAL-001"])
