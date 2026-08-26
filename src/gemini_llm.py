@@ -79,9 +79,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
             response = self._client.interactions.create(
                 model=self.model_name,
                 input=self._build_prompt(normalized_description, attributes, catalog),
-                response_mime_type="application/json",
-                response_format=[
-                    {
+                response_format={
                         "type": "text",
                         "mime_type": "application/json",
                         "schema": {
@@ -101,8 +99,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                             },
                             "required": ["candidates"],
                         },
-                    }
-                ],
+                    },
             )
             response_status = getattr(response, "status", None)
             if response_status != "completed":
@@ -138,12 +135,20 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
     def _build_prompt(normalized_description: str, attributes: Any, catalog: tuple[Any, ...]) -> str:
         catalog_ids = [record.canonical_material_id for record in catalog]
         return (
-            "You are an advisory material-description interpreter. Return candidate "
-            "canonical material IDs only; do not make a final mapping decision, "
-            "do not return MATCHED/UNCERTAIN/NEW_CANDIDATE, and do not provide "
-            "confidence or probability. Use only IDs from the supplied catalog. "
-            "For each candidate give a short reason based on the supplied description "
-            "and explicit technical attributes.\n\n"
+            "You are an advisory material-description interpreter. "
+            "Return ONLY valid JSON matching this exact structure. "
+            "The top-level JSON value MUST be an object, not an array. "
+            "The object MUST contain a key named candidates. "
+            "Each candidate MUST contain canonical_material_id and reason. "
+            "Use canonical_material_id, NEVER id. "
+            'Example: {"candidates":[{"canonical_material_id":"VAL-001","reason":"short reason"}]} '
+            "Do not return Markdown, code fences, prose, or ID: reason lines. "
+            "Return candidate canonical material IDs only; do not make a final "
+            "mapping decision, do not return MATCHED/UNCERTAIN/NEW_CANDIDATE, "
+            "and do not provide confidence or probability. Use only IDs from "
+            "the supplied catalog. Return at most 5 candidates. For each candidate "
+            "give a short reason based on the supplied description and explicit "
+            "technical attributes.\n\n"
             f"Normalized description: {normalized_description}\n"
             f"Explicit attributes: {attributes!r}\n"
             f"Allowed catalog IDs: {catalog_ids}\n"

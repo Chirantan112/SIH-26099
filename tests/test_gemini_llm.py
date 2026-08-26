@@ -73,9 +73,7 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         call = interactions.calls[0]
         self.assertEqual(call["model"], DEFAULT_GEMINI_MODEL)
         response_format = call["response_format"]
-        self.assertIsInstance(response_format, list)
-        self.assertEqual(len(response_format), 1)
-        response_format = response_format[0]
+        self.assertIsInstance(response_format, dict)
         self.assertEqual(response_format["type"], "text")
         self.assertEqual(response_format["mime_type"], "application/json")
         schema = response_format["schema"]
