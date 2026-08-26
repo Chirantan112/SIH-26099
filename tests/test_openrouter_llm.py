@@ -73,7 +73,7 @@ class OpenRouterLLMAdapterTests(unittest.TestCase):
         self.assertEqual([x.canonical_material_id for x in result], ["VAL-001"])
         self.assertEqual(result[0].score, 1.0); self.assertEqual(result[0].source, "openrouter")
         self.assertEqual(factories[0][0], "placeholder"); self.assertEqual(factories[0][1], OPENROUTER_BASE_URL)
-        self.assertEqual(calls[0]["model"], DEFAULT_OPENROUTER_MODEL)
+        self.assertEqual(calls.calls[0]["model"], DEFAULT_OPENROUTER_MODEL)
 
     def test_exact_catalog_ids_only(self):
         adapter, _, _ = self.make_adapter('{"candidates":[{"canonical_material_id":"VAL-001","reason":"ok"}]}')
@@ -108,7 +108,7 @@ class OpenRouterLLMAdapterTests(unittest.TestCase):
     def test_model_exactly_free_gpt_oss(self):
         adapter, calls, _ = self.make_adapter('{"candidates":[]}')
         adapter.interpret("x", "x", object(), CATALOG)
-        self.assertEqual(calls[0]["model"], "openai/gpt-oss-20b:free")
+        self.assertEqual(calls.calls[0]["model"], "openai/gpt-oss-20b:free")
 
     def test_source_is_openrouter(self):
         adapter, _, _ = self.make_adapter('{"candidates":[{"canonical_material_id":"VAL-001","reason":"r"}]}')
@@ -144,12 +144,12 @@ class OpenRouterLLMAdapterTests(unittest.TestCase):
         adapter, calls, _ = self.make_adapter('{"candidates":[]}')
         self.assertEqual(adapter.interpret("", "", object(), CATALOG), ())
         self.assertEqual(adapter.interpret(None, "", object(), CATALOG), ())
-        self.assertEqual(calls, [])
+        self.assertEqual(calls.calls, [])
 
     def test_no_confidence_probability_or_output_score_fields(self):
         adapter, calls, _ = self.make_adapter('{"candidates":[]}')
         adapter.interpret("x", "x", object(), CATALOG)
-        schema = calls[0]["response_format"]["json_schema"]["schema"]
+        schema = calls.calls[0]["response_format"]["json_schema"]["schema"]
         fields = set(schema["properties"]["candidates"]["items"]["properties"])
         self.assertEqual(fields, {"canonical_material_id", "reason"})
 
