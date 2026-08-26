@@ -1,109 +1,267 @@
 # SIH-26099 — CPSE Material Code Harmonization
 
-## Project Overview
+## SIH 2026 Problem Statement 26099
 
-SIH 2026 Problem Statement 26099 focuses on standardizing and harmonizing material descriptions and material codes used across Central Public Sector Enterprises (CPSEs). This repository contains an offline, deterministic prototype for that workflow, including a synthetic CPSE development/evaluation dataset.
+**AI-Driven Standardization and Harmonization of Material Codes Across CPSEs**
 
-The dataset is **not real CPSE procurement data**. It is a small, reproducible fixture designed to exercise normalization, technical attribute extraction, record linkage, catalog mapping, evaluation, and the demonstration interface. It does not represent actual CPSE material-master statistics or production performance.
+This project addresses the standardization and harmonization of material descriptions and material codes used across Central Public Sector Enterprises (CPSEs). It combines a deterministic technical matching pipeline with optional AI advisory components while keeping the final material-mapping decision explainable, reproducible, and authoritative.
 
-## Architecture
+The repository includes a **synthetic CPSE development/evaluation dataset**. It is not real CPSE procurement or material-master data and must not be interpreted as production statistics or production performance.
+
+## Final Architecture
+
+The core decision path is deterministic. Optional AI components provide additional candidate suggestions and interpretation, but they never participate in or override the authoritative mapping decision.
 
 ```text
 Raw Material Description
-↓
-LEGO #2 — Normalization
-↓
-LEGO #3 — Attribute Extraction
-↓
-LEGO #4 — Record Linkage
-↓
-LEGO #5 — Catalog Mapping
-↓
-LEGO #6 — Evaluation
-↓
-LEGO #7 — Demo Pipeline
-↓
-LEGO #8 — Streamlit Dashboard
+        |
+        v
+Deterministic Normalization
+        |
+        v
+Attribute Extraction / Local NLP
+        |
+        v
+Deterministic Record Linkage + Catalog Mapping
+        |
+        +----------------------+
+        |                      |
+        v                      v
+ Optional Local NLP       Optional Gemini 2.5 Flash
+ Advisory Retrieval       Advisory Interpretation
+        |                      |
+        +----------+-----------+
+                   |
+                   v
+        AUTHORITATIVE FINAL DECISION
 ```
 
-- **LEGO #1 — Synthetic CPSE Material Dataset:** Generates the deterministic synthetic material master and labelled evaluation-pair fixtures.
-- **LEGO #2 — Normalization:** Expands controlled abbreviations, standardizes units and formatting, and records the transformations applied.
-- **LEGO #3 — Attribute Extraction:** Parses normalized descriptions into structured, category-specific technical attributes.
-- **LEGO #4 — Record Linkage:** Compares extracted attributes using deterministic similarity scoring and returns `SAME`, `DIFFERENT`, or `UNCERTAIN` with audit evidence.
-- **LEGO #5 — Catalog Mapping:** Resolves legacy records against a canonical catalog individually or in batches, returning `MATCHED`, `UNCERTAIN`, or `NEW_CANDIDATE`.
-- **LEGO #6 — Evaluation:** Computes classification counts and metrics from the synthetic labelled pair fixture.
-- **LEGO #7 — Demo Pipeline:** Connects the normalization, extraction, and catalog-mapping stages into one deterministic offline API for the demonstration.
-- **LEGO #8 — Streamlit Dashboard:** Provides an interactive UI for entering descriptions and viewing normalized text, extracted attributes, decisions, scores, and candidate evidence.
+`run_hybrid_pipeline()` is the orchestration layer around the unchanged deterministic LEGO #2-#5 flow. The deterministic mapping is performed independently of AI suggestions; AI output is bounded, validated against the supplied catalog, and retained only as advisory information.
 
-## LEGO Modules
+### Decision authority
 
-| LEGO | File | Purpose |
+| Component | Role | Authority |
 |---|---|---|
-| #1 | `src/generate_dataset.py` | Generate the synthetic CPSE material master and evaluation pairs. |
-| #2 | `src/normalization.py` | Deterministically normalize material descriptions. |
-| #3 | `src/attribute_extraction.py` | Extract structured technical material attributes. |
-| #4 | `src/record_linkage.py` | Perform deterministic pairwise linkage and similarity scoring. |
-| #5 | `src/catalog_mapping.py` | Perform batch catalog mapping and entity resolution. |
-| #6 | `src/evaluation.py` | Compute evaluation counts and classification metrics. |
-| #7 | `src/demo_pipeline.py` | Run one raw description through the offline demonstration pipeline. |
-| #8 | `app.py` | Run the Streamlit interactive demonstration dashboard. |
+| Normalization | Canonicalizes material descriptions | Deterministic |
+| Attribute extraction | Extracts technical material attributes | Deterministic |
+| Record linkage | Computes deterministic technical similarity/evidence | **Authoritative** |
+| Catalog mapping | Produces `MATCHED`, `UNCERTAIN`, or `NEW_CANDIDATE` | **Authoritative** |
+| Local NLP | Optional local embedding retrieval | Advisory only |
+| Gemini 2.5 Flash | Optional candidate interpretation | Advisory only |
+| `run_hybrid_pipeline()` | Orchestrates deterministic result plus optional AI diagnostics | Deterministic result remains authoritative |
 
-## Current Capabilities
+**AI suggestions never override, replace, filter, or feed back into the deterministic final decision.** AI is not required for the core system, and the deterministic pipeline can operate without external AI services.
 
-- Deterministic description normalization
-- Structured technical attribute extraction
-- Pairwise `SAME` / `DIFFERENT` / `UNCERTAIN` linkage decisions
-- `MATCHED` / `UNCERTAIN` / `NEW_CANDIDATE` catalog-mapping decisions
-- Batch catalog mapping
-- Deterministic similarity scoring
-- Explainable candidate evidence and audit notes
-- Evaluation metrics
-- Streamlit interactive demonstration
+Missing or conflicting technical information is handled conservatively by the deterministic matching logic. The resulting decision and candidate evidence remain explainable and reproducible.
 
-LLM-based or AI semantic matching is **not currently implemented**. The prototype is deterministic, offline, and does not require external APIs.
+## What the System Does
 
-## Evaluation Results
+The system takes a legacy material description and:
 
-Verified results on the synthetic evaluation fixture:
+1. Normalizes controlled terminology, abbreviations, units, punctuation, and formatting.
+2. Extracts structured technical attributes.
+3. Performs deterministic record linkage and catalog mapping.
+4. Produces an authoritative `MATCHED`, `UNCERTAIN`, or `NEW_CANDIDATE` result with deterministic scoring and candidate evidence.
+5. Optionally obtains Local NLP and Gemini advisory candidates when **AI Advisory** is enabled.
+6. Validates advisory candidates against the supplied canonical catalog without allowing them to alter the deterministic result.
+
+When **AI Advisory is disabled**, Local NLP retrieval and Gemini are not called. Deterministic processing continues normally.
+
+## Streamlit Judge-Facing Dashboard
+
+`app.py` provides the interactive Streamlit dashboard for demonstrating the complete workflow.
+
+The dashboard presents:
+
+- a judge-facing CPSE Material Harmonization interface;
+- the pipeline from **INPUT -> NORMALIZE -> EXTRACT -> MATCH -> AI ADVISE -> DECIDE**;
+- a prominent **Authoritative Decision** section;
+- canonical material ID and deterministic score;
+- normalized description and normalization transformations;
+- extracted technical attributes;
+- deterministic candidate evidence;
+- separate **Local NLP** and **Gemini LLM** advisory sections;
+- Local NLP and Gemini availability/fallback status;
+- an **AI Advisory ON/OFF** control.
+
+The dashboard makes the decision boundary explicit:
+
+> **AI suggestions are advisory only. They cannot override the deterministic decision.**
+
+The existing demonstration outcomes remain available:
+
+- `MATCHED`
+- `UNCERTAIN`
+- `NEW CANDIDATE`
+
+## AI Advisory Components
+
+### Local NLP
+
+Local NLP is implemented as an **optional local embedding retrieval adapter**. When its optional local embedding dependencies are available, it can produce advisory catalog candidates from the supplied catalog.
+
+It is:
+
+- optional;
+- local/offline when the required optional dependency is available;
+- lazily initialized;
+- advisory only;
+- never used to override deterministic mapping.
+
+For Streamlit Community Cloud, the repository currently has **no root `requirements.txt`**. Therefore, do not claim that Local NLP is deployable in the cloud environment as-is. Deployment dependency configuration is still required before claiming that the deployed cloud environment provides Local NLP.
+
+### Gemini 2.5 Flash
+
+Gemini is an optional LLM interpretation adapter using:
 
 ```text
-TP = 21
-TN = 10
-FP = 0
-FN = 6
-
-Accuracy  = 0.8378
-Precision = 1.0000
-Recall    = 0.7778
-F1        = 0.8750
+gemini-2.5-flash
 ```
 
-These metrics come from the synthetic evaluation fixture and **must not be interpreted as real CPSE production performance**.
+Its role is limited to returning advisory catalog candidates and short reasons. It does not produce the authoritative mapping decision, confidence, probability, or deterministic decision state.
 
-The repository has **78 automated tests passing**.
+Configure the Gemini credential through the environment/deployment secret:
 
-## Quick Start
+```text
+GEMINI_API_KEY
+```
 
-The dataset generator and core pipeline use the Python standard library. To regenerate the synthetic fixtures and run the automated tests:
+**Never place the API key or any other credential in source code, tests, README files, commits, or repository configuration.**
+
+If Gemini is unavailable, missing credentials, or fails, the application falls back safely to deterministic matching. The core system remains operational.
+
+## Safety / Decision Authority
+
+The project intentionally uses a conservative boundary between deterministic technical matching and AI assistance.
+
+- **DETERMINISTIC ENGINE = AUTHORITATIVE**
+- **LOCAL NLP = OPTIONAL / ADVISORY**
+- **GEMINI LLM = OPTIONAL / ADVISORY**
+
+AI candidates must refer to canonical IDs already present in the supplied catalog. Invalid, malformed, duplicate, or unknown candidates are rejected by the adapter/orchestration validation layer.
+
+AI output cannot create a `MappingResult`, change an existing `MappingResult`, call the deterministic mapper, or override a deterministic technical conflict. The deterministic LEGO #2-#5 result is always the final decision.
+
+This design also means that external AI availability is not a prerequisite for the core harmonization workflow.
+
+## Demo Example
+
+A representative dashboard input is:
+
+```text
+CS GATE VLV 50MM FLG CL150
+```
+
+The deterministic pipeline normalizes the description, extracts the technical attributes, and performs catalog mapping. The resulting deterministic decision is **authoritative**. If AI Advisory is enabled, Local NLP and/or Gemini may provide additional catalog candidates and reasons, but those suggestions remain advisory and cannot change the deterministic result.
+
+## Repository Structure
+
+The important current repository files are:
+
+```text
+SIH-26099/
+├── app.py
+├── README.md
+├── data/
+│   ├── demo/
+│   └── evaluation/
+├── docs/
+│   └── dataset_design.md
+├── src/
+│   ├── ai_retrieval.py
+│   ├── attribute_extraction.py
+│   ├── catalog_mapping.py
+│   ├── demo_pipeline.py
+│   ├── evaluation.py
+│   ├── gemini_llm.py
+│   ├── generate_dataset.py
+│   ├── hybrid_pipeline.py
+│   ├── llm_interpretation.py
+│   ├── local_embedding_retrieval.py
+│   ├── normalization.py
+│   └── record_linkage.py
+└── tests/
+    └── ...
+```
+
+Key responsibilities:
+
+| File | Responsibility |
+|---|---|
+| `app.py` | Streamlit judge-facing dashboard and UI orchestration |
+| `src/normalization.py` | Deterministic description normalization |
+| `src/attribute_extraction.py` | Structured technical attribute extraction |
+| `src/record_linkage.py` | Deterministic pairwise linkage and similarity evidence |
+| `src/catalog_mapping.py` | Deterministic catalog mapping and decision generation |
+| `src/hybrid_pipeline.py` | Deterministic pipeline plus optional advisory orchestration |
+| `src/local_embedding_retrieval.py` | Optional Local NLP advisory retrieval |
+| `src/gemini_llm.py` | Optional Gemini advisory interpretation |
+| `src/ai_retrieval.py` | Advisory candidate/status interfaces |
+| `src/llm_interpretation.py` | LLM advisory interface |
+| `src/demo_pipeline.py` | Demonstration catalog/pipeline support |
+| `src/evaluation.py` | Synthetic evaluation calculations |
+| `src/generate_dataset.py` | Synthetic CPSE dataset generation |
+| `tests/` | Automated regression and component tests |
+
+## Testing
+
+The repository's currently verified local regression result is:
 
 ```powershell
-python src/generate_dataset.py
 python -m unittest discover -s tests -v
 ```
 
-Generated artifacts include:
+```text
+141 tests passing
+```
 
-- `data/demo/material_master.csv` — synthetic legacy material records.
-- `data/evaluation/material_pairs.csv` — labelled `SAME` and `DIFFERENT` record pairs.
+This is a **local verification result**. It is not a claim that 141 tests execute automatically in Streamlit Community Cloud.
 
-See [docs/dataset_design.md](docs/dataset_design.md) for the dataset schema and assumptions.
+No coverage percentage is claimed here.
 
-## Streamlit Demo
+## Run Locally
 
-Install Streamlit in the active Python environment if it is not already available, then start the dashboard with:
+The deterministic test suite can be run with:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+To launch the Streamlit dashboard:
 
 ```powershell
 python -m streamlit run app.py
 ```
 
-The dashboard accepts a raw material description and displays the normalized description, extracted technical attributes, catalog decision, similarity score, and explainable candidate evidence.
+The repository currently has **no root `requirements.txt`**. Do not infer or assume a complete deployment dependency set from this README.
+
+## Streamlit Community Cloud Deployment
+
+The dashboard can be deployed from the GitHub repository using Streamlit Community Cloud. Before claiming a cloud deployment provides optional AI functionality, configure the dependencies required by the selected deployment environment.
+
+For Gemini:
+
+1. Deploy the Streamlit app from the GitHub repository.
+2. Open the application's deployment **Secrets** configuration.
+3. Add `GEMINI_API_KEY` as a deployment secret.
+4. Never commit the credential to GitHub or place it in README/source files.
+
+Gemini remains optional: if the credential or service is unavailable, deterministic matching continues to operate.
+
+For **Local NLP**, the repository does not currently provide a root `requirements.txt`, so the cloud deployment dependency configuration must be established before claiming that Local NLP is available in the deployed environment.
+
+## Synthetic Dataset and Evaluation
+
+The repository contains a small synthetic material master and labelled evaluation fixture used for deterministic development and testing. These fixtures are reproducible development artifacts, not real CPSE procurement data.
+
+The evaluation implementation remains separate from the authoritative runtime decision path. Synthetic evaluation numbers should not be interpreted as production CPSE performance.
+
+## Project Principles
+
+1. **Deterministic technical matching comes first.**
+2. **AI is optional and advisory.**
+3. **AI cannot override deterministic decisions.**
+4. **Catalog IDs are validated against the supplied catalog.**
+5. **Missing or conflicting technical information is handled conservatively.**
+6. **The core system remains usable without external AI services.**
+7. **Credentials belong in environment/deployment secrets, never in the repository.**
