@@ -70,9 +70,11 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertEqual(result[0].source, "gemini"); self.assertEqual(result[0].score, 1.0)
         self.assertIn("NON-PROBABILISTIC", result[0].explanation)
         self.assertEqual(interactions.calls[0]["model"], DEFAULT_GEMINI_MODEL)
+        self.assertEqual(interactions.calls[0]["response_mime_type"], "application/json")
         self.assertIn("candidate", interactions.calls[0]["input"].lower())
         response_format = interactions.calls[0]["response_format"]
         self.assertIsInstance(response_format, list); self.assertEqual(len(response_format), 1)
+        self.assertEqual(response_format[0]["mime_type"], "application/json")
         schema = response_format[0]["schema"]
         candidate_fields = set(schema["properties"]["candidates"]["items"]["properties"])
         self.assertEqual(candidate_fields, {"canonical_material_id", "reason"})
