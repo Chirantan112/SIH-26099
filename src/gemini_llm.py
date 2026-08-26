@@ -145,7 +145,15 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
         output_text = getattr(response, "output_text", None)
         if not isinstance(output_text, str) or not output_text.strip():
             raise ValueError("Gemini response has no structured output text")
-        payload = json.loads(output_text)
+        cleaned = output_text.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            if lines and lines[0].strip().startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
+        payload = json.loads(cleaned)
         if not isinstance(payload, dict) or not isinstance(payload.get("candidates"), list):
             raise ValueError("Gemini response does not match the candidate schema")
 
