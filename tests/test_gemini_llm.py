@@ -19,7 +19,9 @@ CATALOG = (
 )
 
 class FakeResponse:
-    def __init__(self, output_text: str): self.output_text = output_text
+    def __init__(self, output_text: str, status: str = "completed"):
+        self.output_text = output_text
+        self.status = status
 
 class FakeInteractions:
     def __init__(self, response=None, error=None): self.response, self.error, self.calls = response, error, []
@@ -38,8 +40,8 @@ class GeminiLLMAdapterTests(unittest.TestCase):
     def tearDown(self):
         if self.previous_key is None: os.environ.pop("GEMINI_API_KEY", None)
         else: os.environ["GEMINI_API_KEY"] = self.previous_key
-    def _adapter(self, payload, factory_calls=None, error=None):
-        interactions = FakeInteractions(FakeResponse(payload) if payload is not None else None, error=error)
+    def _adapter(self, payload, factory_calls=None, error=None, status="completed"):
+        interactions = FakeInteractions(FakeResponse(payload, status=status) if payload is not None else None, error=error)
         def factory(api_key):
             if factory_calls is not None: factory_calls.append(api_key)
             return FakeClient(interactions)
@@ -69,7 +71,9 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertIn("NON-PROBABILISTIC", result[0].explanation)
         self.assertEqual(interactions.calls[0]["model"], DEFAULT_GEMINI_MODEL)
         self.assertIn("candidate", interactions.calls[0]["input"].lower())
-        schema = interactions.calls[0]["response_format"]["schema"]
+        response_format = interactions.calls[0]["response_format"]
+        self.assertIsInstance(response_format, list); self.assertEqual(len(response_format), 1)
+        schema = response_format[0]["schema"]
         candidate_fields = set(schema["properties"]["candidates"]["items"]["properties"])
         self.assertEqual(candidate_fields, {"canonical_material_id", "reason"})
         self.assertNotIn("confidence", candidate_fields)
@@ -90,9 +94,27 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         adapter, _ = self._adapter(payload)
         result = adapter.interpret("CS GATE VLV 50MM FLG CL150", "CS GATE VLV 50MM FLG CL150", object(), CATALOG)
         self.assertEqual([(item.canonical_material_id, item.explanation.split(" [Advisory")[0]) for item in result], [("VAL-001", "It is a gate valve.")])
+    def test_completed_markdown_bullet_list_is_rejected(self):
+        adapter, _ = self._adapter("* VAL-001: General category match.\n* VAL-002: Matches gate valve type.")
+        self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
+    def test_completed_ordinary_prose_is_rejected(self):
+        adapter, _ = self._adapter("VAL-001 looks like the best match because it is a gate valve.")
+        self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
+    def test_failed_status_is_rejected_and_unavailable(self):
+        adapter, _ = self._adapter('{"candidates":[]}', status="failed")
+        self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
+        self.assertFalse(adapter.status().available); self.assertIn("status='failed'", adapter.status().detail)
+    def test_incomplete_status_is_rejected_and_unavailable(self):
+        adapter, _ = self._adapter('{"candidates":[]}', status="incomplete")
+        self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
+        self.assertFalse(adapter.status().available); self.assertIn("status='incomplete'", adapter.status().detail)
     def test_unknown_catalog_ids_are_rejected(self):
         adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"NOT-IN-CATALOG","reason":"Nope"},{"canonical_material_id":"VAL-001","reason":"Known"}]}')
         self.assertEqual([x.canonical_material_id for x in adapter.interpret("desc", "desc", object(), CATALOG)], ["VAL-001"])
+    def test_exact_catalog_id_is_accepted(self):
+        adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"VAL-001","reason":"Known exact ID"}]}')
+        result = adapter.interpret("desc", "desc", object(), CATALOG)
+        self.assertEqual([x.canonical_material_id for x in result], ["VAL-001"])
     def test_malformed_response_is_rejected_safely(self):
         adapter, _ = self._adapter("not-json")
         self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ()); self.assertFalse(adapter.status().available)

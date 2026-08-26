@@ -79,28 +79,36 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
             response = self._client.interactions.create(
                 model=self.model_name,
                 input=self._build_prompt(normalized_description, attributes, catalog),
-                response_format={
-                    "type": "text",
-                    "mime_type": "application/json",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "candidates": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "canonical_material_id": {"type": "string"},
-                                        "reason": {"type": "string"},
+                response_format=[
+                    {
+                        "type": "text",
+                        "mime_type": "application/json",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "candidates": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "canonical_material_id": {"type": "string"},
+                                            "reason": {"type": "string"},
+                                        },
+                                        "required": ["canonical_material_id", "reason"],
                                     },
-                                    "required": ["canonical_material_id", "reason"],
-                                },
-                            }
+                                }
+                            },
+                            "required": ["candidates"],
                         },
-                        "required": ["candidates"],
-                    },
-                },
+                    }
+                ],
             )
+            response_status = getattr(response, "status", None)
+            if response_status != "completed":
+                self._failure_detail = (
+                    f"Gemini interaction did not complete successfully: status={response_status!r}"
+                )
+                return ()
             return self._parse_response(response, catalog)
         except Exception as error:
             self._failure_detail = f"Gemini interpretation failed: {error}"
@@ -148,11 +156,11 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
         cleaned = output_text.strip()
         if cleaned.startswith("```"):
             lines = cleaned.splitlines()
-            if lines and lines[0].strip().startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            cleaned = "\n".join(lines).strip()
+            if not lines or lines[0].strip() not in ("```", "```json"):
+                raise ValueError("Gemini response contains an unsupported Markdown fence")
+            if len(lines) < 3 or lines[-1].strip() != "```":
+                raise ValueError("Gemini response contains an incomplete Markdown fence")
+            cleaned = "\n".join(lines[1:-1]).strip()
         payload = json.loads(cleaned)
         if not isinstance(payload, dict) or not isinstance(payload.get("candidates"), list):
             raise ValueError("Gemini response does not match the candidate schema")
