@@ -110,23 +110,13 @@ def _analysis_adapters(ai_enabled: bool) -> tuple[Any, Any]:
     return retrieval, llm
 
 
-def analyze_material(
-    description: str | None,
-    catalog: tuple[Any, ...],
-    ai_enabled: bool,
-    retrieval_adapter: Any | None = None,
-    llm_adapter: Any | None = None,
-) -> HybridResult:
+def analyze_material(description: str | None, catalog: tuple[Any, ...], ai_enabled: bool,
+                     retrieval_adapter: Any | None = None, llm_adapter: Any | None = None) -> HybridResult:
     """Run the existing hybrid orchestration; never create a second pipeline."""
     if retrieval_adapter is None or llm_adapter is None:
         retrieval_adapter, llm_adapter = _analysis_adapters(ai_enabled)
-    return run_hybrid_pipeline(
-        description,
-        catalog,
-        legacy_material_code="DASHBOARD-INPUT",
-        retrieval_adapter=retrieval_adapter,
-        llm_adapter=llm_adapter,
-    )
+    return run_hybrid_pipeline(description, catalog, legacy_material_code="DASHBOARD-INPUT",
+                               retrieval_adapter=retrieval_adapter, llm_adapter=llm_adapter)
 
 
 def _inject_styles() -> None:
@@ -243,19 +233,18 @@ def main() -> None:
         raise RuntimeError("Streamlit is required to run this dashboard. Use: streamlit run app.py")
     st.set_page_config(page_title="CPSE Material Harmonization", layout="wide", initial_sidebar_state="expanded")
     _inject_styles()
-    with st.sidebar:
-        st.markdown("### SYSTEM")
-        st.success("Deterministic Engine · Active")
-        st.caption("AUTHORITATIVE")
-        st.divider()
-        st.markdown("### MODE")
-        st.info("Hybrid AI Advisory" if ai_enabled else "Deterministic")
-        st.markdown("### ARCHITECTURE")
-        st.caption("Deterministic matching decides. AI assists.")
     _render_header()
     ai_enabled = st.toggle("AI Advisory", value=False, help="Enable optional Local NLP and Gemini suggestions. AI never overrides the deterministic decision.")
     st.caption("Enable optional Local NLP and Gemini suggestions. AI never overrides the deterministic decision.")
     _render_pipeline()
+    with st.sidebar:
+        st.markdown("### SYSTEM")
+        st.success("Deterministic Engine · Active")
+        st.caption("AUTHORITATIVE")
+        st.markdown("### MODE")
+        st.info("Hybrid AI Advisory" if ai_enabled else "Deterministic")
+        st.markdown("### ARCHITECTURE")
+        st.caption("Deterministic matching decides. AI assists.")
     try:
         catalog = load_demo_catalog(CATALOG_PATH)
     except (OSError, ValueError):
