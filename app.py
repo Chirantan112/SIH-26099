@@ -113,7 +113,10 @@ def _analysis_adapters(ai_enabled: bool) -> tuple[Any, Any]:
 def analyze_material(description: str | None, catalog: tuple[Any, ...], ai_enabled: bool,
                      retrieval_adapter: Any | None = None, llm_adapter: Any | None = None) -> HybridResult:
     """Run the existing hybrid orchestration; never create a second pipeline."""
-    if retrieval_adapter is None or llm_adapter is None:
+    if not ai_enabled:
+        retrieval_adapter = UnavailableRetrievalAdapter("AI advisory is disabled.")
+        llm_adapter = UnavailableLLMAdapter("AI advisory is disabled.")
+    elif retrieval_adapter is None or llm_adapter is None:
         retrieval_adapter, llm_adapter = _analysis_adapters(ai_enabled)
     return run_hybrid_pipeline(description, catalog, legacy_material_code="DASHBOARD-INPUT",
                                retrieval_adapter=retrieval_adapter, llm_adapter=llm_adapter)
