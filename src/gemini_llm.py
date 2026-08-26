@@ -79,6 +79,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
             response = self._client.interactions.create(
                 model=self.model_name,
                 input=self._build_prompt(normalized_description, attributes, catalog),
+                response_mime_type="application/json",
                 response_format=[
                     {
                         "type": "text",
