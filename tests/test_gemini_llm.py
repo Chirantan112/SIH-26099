@@ -69,8 +69,13 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertIn("NON-PROBABILISTIC", result[0].explanation)
         self.assertEqual(interactions.calls[0]["model"], DEFAULT_GEMINI_MODEL)
         self.assertIn("candidate", interactions.calls[0]["input"].lower())
-        self.assertNotIn("confidence", interactions.calls[0]["input"].lower())
-        self.assertNotIn("probability", interactions.calls[0]["input"].lower())
+        schema = interactions.calls[0]["response_format"]["schema"]
+        candidate_fields = set(schema["properties"]["candidates"]["items"]["properties"])
+        self.assertEqual(candidate_fields, {"canonical_material_id", "reason"})
+        self.assertNotIn("confidence", candidate_fields)
+        self.assertNotIn("probability", candidate_fields)
+        self.assertNotIn("score", candidate_fields)
+        self.assertNotIn("decision", candidate_fields)
     def test_unknown_catalog_ids_are_rejected(self):
         adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"NOT-IN-CATALOG","reason":"Nope"},{"canonical_material_id":"VAL-001","reason":"Known"}]}')
         self.assertEqual([x.canonical_material_id for x in adapter.interpret("desc", "desc", object(), CATALOG)], ["VAL-001"])
