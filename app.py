@@ -37,19 +37,11 @@ DEMO_EXAMPLES = {
 }
 
 ATTRIBUTE_LABELS = {
-    "category": "Category",
-    "valve_type": "Valve type",
-    "material": "Material",
-    "size_mm": "Size (mm)",
-    "pressure_class": "Pressure class",
-    "connection": "Connection",
-    "bearing_family": "Bearing family",
-    "dimensions": "Dimensions (mm)",
-    "dimension_unit_present": "Dimension unit stated",
-    "od_mm": "Outside diameter (mm)",
-    "thickness_mm": "Thickness (mm)",
-    "schedule": "Schedule",
-    "end": "End",
+    "category": "Category", "valve_type": "Valve type", "material": "Material",
+    "size_mm": "Size (mm)", "pressure_class": "Pressure class", "connection": "Connection",
+    "bearing_family": "Bearing family", "dimensions": "Dimensions (mm)",
+    "dimension_unit_present": "Dimension unit stated", "od_mm": "Outside diameter (mm)",
+    "thickness_mm": "Thickness (mm)", "schedule": "Schedule", "end": "End",
 }
 
 
@@ -138,133 +130,37 @@ def analyze_material(
 
 
 def _inject_styles() -> None:
-    st.markdown(
-        """
-        <style>
-        .hero {
-            padding: 1.35rem 1.55rem;
-            border: 1px solid rgba(128,128,128,.22);
-            border-radius: 18px;
-            background: linear-gradient(135deg, rgba(31,78,121,.10), rgba(255,255,255,.02));
-            margin-bottom: 1rem;
-        }
-        .eyebrow {
-            font-size: .72rem;
-            letter-spacing: .13em;
-            font-weight: 750;
-            opacity: .68;
-            text-transform: uppercase;
-        }
-        .hero-title { font-size: 2.1rem; font-weight: 800; margin: .15rem 0 .2rem; }
-        .hero-subtitle { font-size: 1rem; opacity: .72; }
-        .architecture-card {
-            padding: .75rem .8rem;
-            border: 1px solid rgba(128,128,128,.22);
-            border-radius: 12px;
-            min-height: 78px;
-            background: rgba(255,255,255,.02);
-        }
-        .architecture-kicker { font-size: .68rem; letter-spacing: .08em; font-weight: 800; opacity: .62; }
-        .architecture-main { font-weight: 800; margin-top: .15rem; }
-        .architecture-note { font-size: .75rem; opacity: .68; }
-        .flow-card {
-            padding: .85rem .75rem;
-            border: 1px solid rgba(128,128,128,.22);
-            border-radius: 14px;
-            min-height: 92px;
-            background: rgba(255,255,255,.02);
-        }
-        .flow-num { font-size: .68rem; font-weight: 800; opacity: .52; }
-        .flow-title { font-weight: 800; margin-top: .2rem; font-size: .88rem; }
-        .flow-note { font-size: .72rem; opacity: .66; }
-        .flow-arrow { text-align: center; font-size: 1.2rem; opacity: .45; padding-top: 1.8rem; }
-        .authority-card {
-            padding: 1.15rem 1.25rem;
-            border: 1px solid rgba(48,128,72,.30);
-            border-radius: 16px;
-            background: rgba(48,128,72,.06);
-        }
-        .authority-label, .advisory-label {
-            font-size: .72rem;
-            font-weight: 850;
-            letter-spacing: .1em;
-            text-transform: uppercase;
-        }
-        .authority-label { color: #2f7d4a; }
-        .advisory-label { color: #9b6a13; }
-        .authority-id { font-size: 1.85rem; font-weight: 850; margin: .25rem 0; }
-        .decision-pill {
-            display: inline-block;
-            padding: .18rem .55rem;
-            border-radius: 999px;
-            font-size: .74rem;
-            font-weight: 800;
-            background: rgba(48,128,72,.12);
-        }
-        .advisory-card {
-            padding: 1rem 1.1rem;
-            border: 1px solid rgba(217,155,39,.28);
-            border-radius: 16px;
-            background: rgba(217,155,39,.06);
-        }
-        .advisory-warning {
-            padding: .85rem 1rem;
-            margin-top: .9rem;
-            border-left: 4px solid #d99b27;
-            border-radius: 8px;
-            background: rgba(217,155,39,.08);
-            font-weight: 650;
-        }
-        .status-dot { font-size: 1rem; vertical-align: -1px; }
-        .status-title { font-weight: 780; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("""
+    <style>
+    .hero { padding:1.4rem 1.6rem; border:1px solid rgba(128,128,128,.25); border-radius:18px; background:linear-gradient(135deg,rgba(31,78,121,.12),rgba(255,255,255,.02)); }
+    .eyebrow { font-size:.75rem; letter-spacing:.12em; font-weight:700; opacity:.72; text-transform:uppercase; }
+    .stage { padding:.9rem; border:1px solid rgba(128,128,128,.25); border-radius:14px; min-height:92px; }
+    .stage-num { font-size:.72rem; font-weight:800; opacity:.55; }
+    .stage-title { font-weight:750; margin-top:.2rem; }
+    .stage-note { font-size:.78rem; opacity:.68; }
+    .decision-note { font-size:.82rem; opacity:.7; }
+    .advisory-note { padding:.8rem 1rem; border-left:4px solid #d99b27; background:rgba(217,155,39,.08); border-radius:8px; }
+    .status-pill { font-weight:650; }
+    </style>
+    """, unsafe_allow_html=True)
 
 
 def _render_header() -> None:
-    st.markdown(
-        '<div class="hero">'
-        '<div class="eyebrow">CPSE MATERIAL HARMONIZATION</div>'
-        '<div class="hero-title">CPSE Material Harmonization</div>'
-        '<div class="hero-subtitle">Deterministic material matching with optional local NLP and Gemini advisory intelligence.</div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="hero"><div class="eyebrow">CPSE MATERIAL HARMONIZATION</div><div class="hero-title">CPSE Material Harmonization</div><div class="hero-subtitle">Deterministic material matching with optional local NLP and Gemini advisory intelligence.</div></div>', unsafe_allow_html=True)
     cols = st.columns(3)
-    cards = (
-        ("DETERMINISTIC ENGINE", "AUTHORITATIVE", "Final decision source"),
-        ("LOCAL NLP", "ADVISORY", "Technical interpretation"),
-        ("GEMINI LLM", "ADVISORY", "Candidate reasoning"),
-    )
+    cards = (("DETERMINISTIC ENGINE", "AUTHORITATIVE", "Final decision source"), ("LOCAL NLP", "ADVISORY", "Technical interpretation"), ("GEMINI LLM", "ADVISORY", "Candidate reasoning"))
     for column, (kicker, main, note) in zip(cols, cards):
         with column:
-            st.markdown(
-                f'<div class="architecture-card"><div class="architecture-kicker">{kicker}</div>'
-                f'<div class="architecture-main">{main}</div><div class="architecture-note">{note}</div></div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(f'<div class="architecture-card"><div class="architecture-kicker">{kicker}</div><div class="architecture-main">{main}</div><div class="architecture-note">{note}</div></div>', unsafe_allow_html=True)
     st.caption("Deterministic matching decides. AI assists.")
 
 
 def _render_pipeline() -> None:
-    stages = (
-        ("01", "INPUT", "Legacy material description"),
-        ("02", "NORMALIZE", "Canonical text"),
-        ("03", "EXTRACT", "NLP / technical attributes"),
-        ("04", "MATCH", "Deterministic catalog mapping"),
-        ("05", "AI ADVISE", "Local NLP + Gemini"),
-        ("06", "DECIDE", "Authoritative result"),
-    )
+    stages = (("01", "INPUT", "Legacy material description"), ("02", "NORMALIZE", "Canonical text"), ("03", "EXTRACT", "NLP / technical attributes"), ("04", "MATCH", "Deterministic catalog mapping"), ("05", "AI ADVISE", "Local NLP + Gemini"), ("06", "DECIDE", "Authoritative result"))
     columns = st.columns([1.7, .25, 1.7, .25, 1.7, .25, 1.7, .25, 1.7, .25, 1.7])
     for index, (number, title, note) in enumerate(stages):
         with columns[index * 2]:
-            st.markdown(
-                f'<div class="flow-card"><div class="flow-num">{number}</div>'
-                f'<div class="flow-title">{title}</div><div class="flow-note">{note}</div></div>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(f'<div class="flow-card"><div class="flow-num">{number}</div><div class="flow-title">{title}</div><div class="flow-note">{note}</div></div>', unsafe_allow_html=True)
         if index < len(stages) - 1:
             with columns[index * 2 + 1]:
                 st.markdown('<div class="flow-arrow">→</div>', unsafe_allow_html=True)
@@ -281,11 +177,7 @@ def _render_status(result: HybridResult | None = None) -> None:
     for column, status, label in ((columns[0], statuses[0], "Local NLP"), (columns[1], statuses[1], "Gemini LLM")):
         symbol = "●" if status.available else "○"
         with column:
-            st.markdown(
-                f'**{label}** <span class="status-dot">{symbol}</span> '
-                f'<span class="status-title">{_friendly_status(status)}</span>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(f'**{label}** <span class="status-dot">{symbol}</span> <span class="status-title">{_friendly_status(status)}</span>', unsafe_allow_html=True)
             st.caption("Advisory only — never overrides the deterministic decision.")
 
 
@@ -293,12 +185,7 @@ def _render_decision(result: HybridResult) -> None:
     decision = result.mapping_result.decision
     canonical_id = result.mapping_result.canonical_material_id or "Not assigned"
     score = result.mapping_result.score
-    st.markdown(
-        f'<div class="authority-card"><div class="authority-label">Authoritative Decision</div>'
-        f'<div class="authority-id">{canonical_id}</div>'
-        f'<span class="decision-pill">{decision}</span></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="authority-card"><div class="authority-label">Authoritative Decision</div><div class="authority-id">{canonical_id}</div><span class="decision-pill">{decision}</span></div>', unsafe_allow_html=True)
     first, second, third = st.columns(3)
     first.metric("Canonical Material", canonical_id)
     second.metric("Deterministic Score", f"{score:.3f}")
@@ -311,10 +198,7 @@ def _render_advisory(result: HybridResult) -> None:
     local = [item for item in result.ai_candidate_suggestions if item.source == "local_embedding"]
     gemini = [item for item in result.ai_candidate_suggestions if item.source == "gemini"]
     st.markdown("## AI Advisory")
-    st.markdown(
-        '<div class="advisory-warning">AI suggestions are advisory only. They cannot override the deterministic decision.</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="advisory-warning">AI suggestions are advisory only. They cannot override the deterministic decision.</div>', unsafe_allow_html=True)
     cols = st.columns(2)
     for column, label, source_rows in ((cols[0], "Local NLP", local), (cols[1], "Gemini LLM", gemini)):
         with column:
@@ -329,7 +213,6 @@ def _render_advisory(result: HybridResult) -> None:
 def _render_analysis(result: HybridResult, raw_description: str | None) -> None:
     st.markdown("## Authoritative Result")
     _render_decision(result)
-
     st.markdown("## Processing Evidence")
     left, right = st.columns(2)
     with left:
@@ -344,54 +227,40 @@ def _render_analysis(result: HybridResult, raw_description: str | None) -> None:
                 st.write(f"• {item}")
         else:
             st.caption("No transformations reported.")
-
     st.markdown("### NLP / Attribute Extraction")
     st.caption("Local NLP stage: technical interpretation before deterministic catalog matching.")
     st.dataframe(attribute_rows(result.attributes), hide_index=True, use_container_width=True)
-
     with st.expander("Deterministic Candidate Evidence", expanded=False):
         if result.mapping_result.all_candidates:
             st.dataframe(candidate_rows(result.mapping_result.all_candidates), hide_index=True, use_container_width=True)
         else:
             st.caption("No candidate evidence is available.")
-
     _render_advisory(result)
 
 
 def main() -> None:
     if st is None:  # pragma: no cover
         raise RuntimeError("Streamlit is required to run this dashboard. Use: streamlit run app.py")
-    st.set_page_config(
-        page_title="CPSE Material Harmonization",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
+    st.set_page_config(page_title="CPSE Material Harmonization", layout="wide", initial_sidebar_state="expanded")
     _inject_styles()
-
     with st.sidebar:
         st.markdown("### SYSTEM")
         st.success("Deterministic Engine · Active")
         st.caption("AUTHORITATIVE")
         st.divider()
-        ai_enabled = st.toggle(
-            "AI Advisory",
-            value=False,
-            help="Enable optional Local NLP and Gemini suggestions. They never change the final decision.",
-        )
         st.markdown("### MODE")
         st.info("Hybrid AI Advisory" if ai_enabled else "Deterministic")
         st.markdown("### ARCHITECTURE")
         st.caption("Deterministic matching decides. AI assists.")
-
     _render_header()
+    ai_enabled = st.toggle("AI Advisory", value=False, help="Enable optional Local NLP and Gemini suggestions. AI never overrides the deterministic decision.")
+    st.caption("Enable optional Local NLP and Gemini suggestions. AI never overrides the deterministic decision.")
     _render_pipeline()
-
     try:
         catalog = load_demo_catalog(CATALOG_PATH)
     except (OSError, ValueError):
         st.error("The local reference catalog could not be loaded.")
         return
-
     st.divider()
     st.markdown("## Analyze Material")
     examples = st.columns(3)
@@ -399,25 +268,16 @@ def main() -> None:
         with column:
             if st.button(outcome.title(), use_container_width=True):
                 st.session_state["material_description"] = example
-
-    description = st.text_area(
-        "Material Description",
-        key="material_description",
-        height=120,
-        placeholder="Gate Valve Carbon Steel 150 50mm Flanged",
-    )
+    description = st.text_area("Material Description", key="material_description", height=120, placeholder="Gate Valve Carbon Steel 150 50mm Flanged")
     analyze = st.button("Analyze Material", type="primary", use_container_width=True)
-
     if "analysis_result" not in st.session_state:
         st.session_state["analysis_result"] = None
-
     if analyze:
         try:
             st.session_state["analysis_result"] = analyze_material(description, catalog, ai_enabled)
         except (TypeError, ValueError):
             st.session_state["analysis_result"] = None
             st.error("The description could not be processed safely. Please check the input and try again.")
-
     result = st.session_state.get("analysis_result")
     if result is None:
         st.divider()
@@ -426,7 +286,6 @@ def main() -> None:
         st.caption('Example: "Gate Valve Carbon Steel 150 50mm Flanged"')
         _render_status()
         return
-
     st.divider()
     _render_analysis(result, description)
     st.divider()
