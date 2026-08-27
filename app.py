@@ -155,8 +155,8 @@ def _inject_styles() -> None:
     st.markdown(
         """
         <style>
-        :root { --cpse-bg:#07111f; --cpse-card:#0d1929; --cpse-card-2:#101f32; --cpse-border:rgba(170,190,215,.16); --cpse-muted:#8ea0b7; --cpse-text:#eef5ff; --cpse-green:#55d68a; --cpse-cyan:#58c7e8; --cpse-purple:#b48cff; --cpse-amber:#e6b35a; }
-        .stApp { background: radial-gradient(circle at 85% 0%, rgba(44,103,145,.12), transparent 34%), var(--cpse-bg); color:var(--cpse-text); }
+        :root { --cpse-bg:#07111f; --cpse-card:#0d1929; --cpse-border:rgba(170,190,215,.16); --cpse-muted:#8ea0b7; --cpse-text:#eef5ff; --cpse-green:#55d68a; --cpse-cyan:#58c7e8; --cpse-purple:#b48cff; --cpse-amber:#e6b35a; }
+        .stApp { background:radial-gradient(circle at 85% 0%, rgba(44,103,145,.12), transparent 34%), var(--cpse-bg); color:var(--cpse-text); }
         .block-container { max-width:1500px; padding-top:2rem; padding-bottom:2rem; }
         [data-testid="stSidebar"] { background:#081421; border-right:1px solid var(--cpse-border); }
         [data-testid="stSidebar"] .block-container { padding-top:1.5rem; }
@@ -194,18 +194,8 @@ def _inject_styles() -> None:
         .online { color:var(--cpse-green); }
         .advisory { color:var(--cpse-purple); }
         .authoritative { color:var(--cpse-green); }
-        @media (max-width: 1050px) {
-            .flow-grid { grid-template-columns:repeat(3,1fr); }
-            .flow-arrow { display:none; }
-        }
-        @media (max-width: 720px) {
-            .block-container { padding:1rem .8rem 1.5rem; }
-            .hero { padding:1.2rem; }
-            .architecture-card { min-height:0; }
-            .flow-grid { grid-template-columns:1fr; }
-            .flow-card { min-height:78px; }
-            .authority-id { display:block; margin-bottom:.65rem; }
-        }
+        @media (max-width:1050px) { .flow-grid { grid-template-columns:repeat(3,1fr); } .flow-arrow { display:none; } }
+        @media (max-width:720px) { .block-container { padding:1rem .8rem 1.5rem; } .hero { padding:1.2rem; } .architecture-card { min-height:0; } .flow-grid { grid-template-columns:1fr; } .flow-card { min-height:78px; } .authority-id { display:block; margin-bottom:.65rem; } }
         </style>
         """,
         unsafe_allow_html=True,
@@ -274,9 +264,10 @@ def _render_status(result: HybridResult | None = None, ai_enabled: bool = True) 
         (columns[1], statuses[1], "Gemini 2.5 Flash"),
     ):
         symbol = "●" if status.available else "○"
+        dot_class = "online" if status.available else ""
         with column:
             st.markdown(
-                f'**{label}** <span class="service-dot {"online" if status.available else ""}">{symbol}</span> <span>{_friendly_status(status)}</span>',
+                f'<span class="service-dot {dot_class}">{symbol}</span> <strong>{label}</strong> — {_friendly_status(status)}',
                 unsafe_allow_html=True,
             )
             st.caption("Advisory only — never overrides the deterministic decision.")
@@ -317,11 +308,7 @@ def _render_advisory(result: HybridResult) -> None:
                 unsafe_allow_html=True,
             )
             if source_rows:
-                st.dataframe(
-                    advisory_rows(tuple(source_rows)),
-                    hide_index=True,
-                    use_container_width=True,
-                )
+                st.dataframe(advisory_rows(tuple(source_rows)), hide_index=True, use_container_width=True)
             else:
                 st.caption("No advisory suggestions available from this component.")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -347,19 +334,11 @@ def _render_analysis(result: HybridResult, raw_description: str | None) -> None:
             st.caption("No transformations reported.")
 
     st.markdown("### Technical Attributes")
-    st.dataframe(
-        attribute_rows(result.attributes),
-        hide_index=True,
-        use_container_width=True,
-    )
+    st.dataframe(attribute_rows(result.attributes), hide_index=True, use_container_width=True)
 
     with st.expander("Deterministic Candidate Evidence", expanded=False):
         if result.mapping_result.all_candidates:
-            st.dataframe(
-                candidate_rows(result.mapping_result.all_candidates),
-                hide_index=True,
-                use_container_width=True,
-            )
+            st.dataframe(candidate_rows(result.mapping_result.all_candidates), hide_index=True, use_container_width=True)
         else:
             st.caption("No candidate evidence is available.")
 
@@ -477,8 +456,7 @@ def main() -> None:
     if mode_changed and result is not None:
         old_mode = "Hybrid AI" if previous_mode else "Deterministic Only"
         st.warning(
-            f"ANALYSIS MODE CHANGED — Previous results were generated using {old_mode}. "
-            "Re-analyze to generate results for the current mode."
+            f"ANALYSIS MODE CHANGED — Previous results were generated using {old_mode}. Re-analyze to generate results for the current mode."
         )
         if st.button("Analyze Again →", type="primary", use_container_width=True):
             with st.spinner("Re-analyzing material through the selected pipeline…"):
