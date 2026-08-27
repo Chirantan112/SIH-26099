@@ -1,7 +1,7 @@
 """Fault-tolerant, non-authoritative orchestration for LEGO #9A.
 
 This module adds optional AI suggestions around the existing deterministic
-pipeline.  It never changes candidate ranking, linkage, or catalog-mapping
+pipeline. It never changes candidate ranking, linkage, or catalog-mapping
 logic: LEGO #4/#5 remains the sole authority for final decisions.
 """
 
@@ -23,6 +23,17 @@ _SuggestionAdapter = TypeVar("_SuggestionAdapter")
 
 
 @dataclass(frozen=True)
+class AIConsensus:
+    """Explicit advisory conclusion derived only from AI evidence."""
+
+    conclusion: str  # MATCHED, UNCERTAIN, NEW_CANDIDATE, or UNAVAILABLE
+    canonical_material_id: str | None
+    reason: str
+    local_candidates: tuple[str, ...]
+    gemini_candidates: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class HybridResult:
     """Deterministic result plus bounded, non-authoritative AI diagnostics."""
 
@@ -33,6 +44,7 @@ class HybridResult:
     mapping_result: MappingResult
     ai_statuses: tuple[AdapterStatus, ...]
     ai_candidate_suggestions: tuple[CandidateSuggestion, ...]
+    ai_consensus: AIConsensus
     fallback_used: bool
     fallback_information: str
     explanation: str
@@ -40,10 +52,9 @@ class HybridResult:
 
 def _safe_status(component: str, adapter: object) -> AdapterStatus:
     """Read optional status without allowing an adapter failure to stop mapping."""
-
     try:
         status = adapter.status()  # type: ignore[attr-defined]
-    except Exception as error:  # Adapter boundaries must be fault tolerant.
+    except Exception as error:
         return AdapterStatus(component=component, available=False, detail=f"Status unavailable: {error}")
     if not isinstance(status, AdapterStatus) or status.component != component:
         return AdapterStatus(component=component, available=False, detail="Adapter returned an invalid status.")
@@ -57,12 +68,11 @@ def _safe_suggestions(
     status: AdapterStatus,
 ) -> tuple[tuple[CandidateSuggestion, ...], AdapterStatus]:
     """Run one optional adapter and convert failures into a non-fatal status."""
-
     if not status.available:
         return (), status
     try:
         suggestions = operation(adapter)
-    except Exception as error:  # Adapter boundaries must be fault tolerant.
+    except Exception as error:
         return (), replace(status, available=False, detail=f"Adapter failed: {error}")
     if not isinstance(suggestions, tuple):
         return (), replace(status, available=False, detail="Adapter returned an invalid suggestion collection.")
@@ -74,7 +84,6 @@ def _valid_suggestions(
     catalog: tuple[CatalogRecord, ...],
 ) -> tuple[CandidateSuggestion, ...]:
     """Accept only bounded, well-formed references to known catalog IDs."""
-
     known_ids = {record.canonical_material_id for record in catalog}
     valid: list[CandidateSuggestion] = []
     for suggestion in suggestions:
@@ -87,11 +96,65 @@ def _valid_suggestions(
             or not isinstance(suggestion.source, str)
             or not suggestion.source.strip()
             or not isinstance(suggestion.explanation, str)
+            or not isinstance(suggestion.matching_attributes, tuple)
+            or not isinstance(suggestion.conflicting_attributes, tuple)
+            or not isinstance(suggestion.missing_attributes, tuple)
+            or suggestion.technical_compatible not in (True, False, None)
         ):
             continue
         valid.append(suggestion)
 
     return tuple(sorted(valid, key=lambda item: (-item.score, item.canonical_material_id, item.source)))[:MAX_AI_CANDIDATE_SUGGESTIONS]
+
+
+def _source_candidates(suggestions: tuple[CandidateSuggestion, ...], source: str) -> tuple[CandidateSuggestion, ...]:
+    return tuple(item for item in suggestions if item.source == source)
+
+
+def _ai_consensus(
+    statuses: tuple[AdapterStatus, AdapterStatus],
+    suggestions: tuple[CandidateSuggestion, ...],
+) -> AIConsensus:
+    """Derive a conservative AI conclusion without consulting deterministic mapping."""
+    local_status, gemini_status = statuses
+    local = _source_candidates(suggestions, "local_embedding")
+    gemini = _source_candidates(suggestions, "gemini")
+    local_compatible = tuple(item for item in local if item.technical_compatible is True)
+    gemini_compatible = tuple(item for item in gemini if item.technical_compatible is True)
+    local_ids = tuple(item.canonical_material_id for item in local)
+    gemini_ids = tuple(item.canonical_material_id for item in gemini)
+
+    if not local_status.available and not gemini_status.available:
+        return AIConsensus("UNAVAILABLE", None, "Both advisory AI components are unavailable; no AI conclusion was produced.", local_ids, gemini_ids)
+
+    if local_status.available and gemini_status.available:
+        if local_compatible and gemini_compatible:
+            if local_compatible[0].canonical_material_id == gemini_compatible[0].canonical_material_id:
+                candidate = local_compatible[0].canonical_material_id
+                return AIConsensus("MATCHED", candidate, "Local NLP and Gemini independently identify the same technically compatible candidate with no reported critical conflict.", local_ids, gemini_ids)
+            return AIConsensus("UNCERTAIN", None, "Local NLP and Gemini identify different technically compatible candidates; advisory evidence disagrees.", local_ids, gemini_ids)
+        if local_compatible or gemini_compatible:
+            return AIConsensus("UNCERTAIN", None, "The advisory components do not agree on technical compatibility; equivalence cannot be established from AI evidence.", local_ids, gemini_ids)
+        if not local and not gemini:
+            return AIConsensus("NEW_CANDIDATE", None, "Both advisory components returned no catalog candidate.", local_ids, gemini_ids)
+        explicit_conflicts = all(
+            item.technical_compatible is False or bool(item.conflicting_attributes) or bool(item.missing_attributes)
+            for item in local + gemini
+        )
+        if explicit_conflicts:
+            return AIConsensus("NEW_CANDIDATE", None, "All AI-supplied candidates contain technical conflicts or unresolved attributes.", local_ids, gemini_ids)
+        return AIConsensus("UNCERTAIN", None, "AI evidence is insufficient to establish technical equivalence.", local_ids, gemini_ids)
+
+    available = local if local_status.available else gemini
+    compatible = local_compatible if local_status.available else gemini_compatible
+    if compatible:
+        candidate = compatible[0].canonical_material_id
+        return AIConsensus("MATCHED", candidate, "The available advisory component identifies a technically compatible candidate; the other AI component was unavailable.", local_ids, gemini_ids)
+    if not available:
+        return AIConsensus("NEW_CANDIDATE", None, "The available advisory component returned no catalog candidate.", local_ids, gemini_ids)
+    if all(item.technical_compatible is False or item.conflicting_attributes or item.missing_attributes for item in available):
+        return AIConsensus("NEW_CANDIDATE", None, "The available advisory component found only technically conflicting or unresolved candidates.", local_ids, gemini_ids)
+    return AIConsensus("UNCERTAIN", None, "The available advisory evidence is insufficient to establish technical equivalence.", local_ids, gemini_ids)
 
 
 def run_hybrid_pipeline(
@@ -121,6 +184,7 @@ def run_hybrid_pipeline(
     _report("extract")
     mapping_input = raw_description if normalization.normalized_text else ""
 
+    # This is intentionally unchanged deterministic LEGO #2-#5 authority.
     mapping_result = map_records((LegacyRecord(legacy_material_code, mapping_input),), catalog)[0]
     _report("match")
 
@@ -141,11 +205,12 @@ def run_hybrid_pipeline(
     _report("ai_advisory")
     suggestions = _valid_suggestions(retrieval_suggestions + llm_suggestions, catalog)
     statuses = (retrieval_status, llm_status)
+    consensus = _ai_consensus(statuses, suggestions)
     fallback_used = not all(status.available for status in statuses)
     fallback_information = (
         "Deterministic LEGO #2-#5 mapping remains active; unavailable or failed AI adapters were skipped."
         if fallback_used
-        else "Deterministic LEGO #2-#5 mapping verified all advisory AI suggestions."
+        else "Deterministic LEGO #2-#5 mapping remains authoritative; AI consensus is advisory evidence only."
     )
     result = HybridResult(
         legacy_material_code=legacy_material_code,
@@ -155,9 +220,10 @@ def run_hybrid_pipeline(
         mapping_result=mapping_result,
         ai_statuses=statuses,
         ai_candidate_suggestions=suggestions,
+        ai_consensus=consensus,
         fallback_used=fallback_used,
         fallback_information=fallback_information,
-        explanation="AI suggestions are advisory only; final mapping is the unchanged deterministic LEGO #4/#5 result.",
+        explanation="AI suggestions and consensus are advisory only; final mapping is the unchanged deterministic LEGO #4/#5 result.",
     )
     _report("decide")
     return result
