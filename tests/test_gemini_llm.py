@@ -83,6 +83,7 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         candidate_schema = schema["properties"]["candidates"]["items"]
         self.assertIn("canonical_material_id", candidate_schema["properties"])
         self.assertIn("reason", candidate_schema["properties"])
+        self.assertEqual(candidate_schema["required"], ["canonical_material_id", "reason"])
     def test_successful_fenced_json_response_shape(self):
         payload = """```json
 {
@@ -104,6 +105,21 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertIn("Missing: none.", result[0].explanation)
         self.assertIn("Technically compatible: unknown.", result[0].explanation)
         self.assertIn("[Advisory rank only; NON-PROBABILISTIC and NON-AUTHORITATIVE.]", result[0].explanation)
+        self.assertEqual(result[0].matching_attributes, ())
+        self.assertEqual(result[0].conflicting_attributes, ())
+        self.assertEqual(result[0].missing_attributes, ())
+        self.assertIsNone(result[0].technical_compatible)
+    def test_complete_technical_evidence_is_preserved(self):
+        payload = '{"candidates":[{"canonical_material_id":"VAL-001","reason":"Technical match","matching_attributes":["valve_type=gate","material=carbon steel"],"conflicting_attributes":[],"missing_attributes":["temperature_class"],"technical_compatible":true}]}'
+        adapter, _ = self._adapter(payload)
+        result = adapter.interpret("CS GATE VLV 50MM FLG CL150", "CS GATE VLV 50MM FLG CL150", object(), CATALOG)
+        self.assertEqual(len(result), 1)
+        candidate = result[0]
+        self.assertEqual(candidate.matching_attributes, ("valve_type=gate", "material=carbon steel"))
+        self.assertEqual(candidate.conflicting_attributes, ())
+        self.assertEqual(candidate.missing_attributes, ("temperature_class",))
+        self.assertTrue(candidate.technical_compatible)
+        self.assertIn("Technically compatible: yes.", candidate.explanation)
     def test_completed_markdown_bullet_list_is_rejected(self):
         adapter, _ = self._adapter("* VAL-001: General category match.\n* VAL-002: Matches gate valve type.")
         self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
