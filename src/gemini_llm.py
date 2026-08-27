@@ -88,13 +88,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                                         "technical_compatible": {"type": "boolean"},
                                         "reason": {"type": "string"},
                                     },
-                                    "required": [
-                                        "canonical_material_id",
-                                        "matching_attributes",
-                                        "conflicting_attributes",
-                                        "missing_attributes",
-                                        "reason",
-                                    ],
+                                    "required": ["canonical_material_id", "reason"],
                                 },
                             }
                         },
