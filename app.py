@@ -143,13 +143,13 @@ def _inject_styles() -> None:
     .card{padding:1rem;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,rgba(12,27,44,.96),rgba(7,17,29,.96));box-shadow:0 12px 28px rgba(0,0,0,.14)}
     .service-card{min-height:108px}.service-kicker{color:#9fb2c4;font-size:.6rem;font-weight:900;letter-spacing:.11em}.service-main{margin-top:.55rem;font-size:.95rem;font-weight:950}.service-main.green{color:var(--green)}.service-main.purple{color:var(--purple)}.service-note{margin-top:.35rem;color:var(--muted);font-size:.69rem;line-height:1.4}
     .input-card{padding:1rem;border:1px solid var(--line);border-radius:18px;background:rgba(8,18,31,.84)}.input-label{font-size:.78rem;font-weight:900}.scenario-label{margin-top:.7rem;color:#91a7bc;font-size:.63rem;font-weight:800}.scenario-buttons{display:flex;gap:.45rem;flex-wrap:wrap}
-    .pipeline{margin-top:.8rem;padding:.9rem;border:1px solid var(--line);border-radius:18px;background:rgba(6,15,26,.9)}.pipeline-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}.pipeline-head span{color:#aebfd0;font-size:.63rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.pipeline-head small{color:#637b92;font-size:.61rem}.flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.4rem}.stage{min-width:0;padding:.72rem .55rem;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0b1929,#07111e);position:relative;transition:border-color .15s,background .15s,box-shadow .15s}.stage:not(:last-child):after{content:"→";position:absolute;right:-.42rem;top:50%;transform:translateY(-50%);z-index:2;color:#5d7891;font-size:.8rem}.stage-icon{float:right;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid #334b60;color:#637b92;font-size:.75rem;font-weight:950}.stage.done{border-color:rgba(85,227,154,.55);background:linear-gradient(180deg,rgba(14,58,42,.72),rgba(7,27,24,.92));box-shadow:0 0 18px rgba(85,227,154,.09)}.stage.done .stage-icon{background:var(--green);border-color:var(--green);color:#062016}.stage.active{border-color:rgba(66,200,238,.65);box-shadow:0 0 20px rgba(66,200,238,.12)}.stage.active .stage-icon{border-color:var(--cyan);color:var(--cyan);animation:pulse 1s infinite}.stage-num{color:var(--cyan);font-size:.6rem;font-weight:950;letter-spacing:.1em}.stage-name{margin-top:.35rem;font-size:.65rem;font-weight:900;white-space:nowrap}.stage-note{margin-top:.3rem;color:#8299ad;font-size:.57rem;line-height:1.3}@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(66,200,238,0)}}
+    .pipeline{margin-top:.8rem;padding:.9rem;border:1px solid var(--line);border-radius:18px;background:rgba(6,15,26,.9)}.pipeline-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}.pipeline-head span{color:#aebfd0;font-size:.63rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.pipeline-head small{color:#637b92;font-size:.61rem}.flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.4rem}.stage{min-width:0;padding:.72rem .55rem;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0b1929,#07111e);position:relative;transition:border-color .15s,background .15s,box-shadow .15s}.stage:not(:last-child):after{content:"→";position:absolute;right:-.42rem;top:50%;transform:translateY(-50%);z-index:2;color:#5d7891;font-size:.8rem}.stage-icon{float:right;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid #334b60;color:#637b92;font-size:.75rem;font-weight:950}.stage.done{border-color:rgba(85,227,154,.55);background:linear-gradient(180deg,rgba(14,58,42,.72),rgba(7,27,24,.92));box-shadow:0 0 18px rgba(85,227,154,.09)}.stage.done .stage-icon{background:var(--green);border-color:var(--green);color:#062016}.stage.active{border-color:rgba(66,200,238,.65);box-shadow:0 0 20px rgba(66,200,238,.12)}.stage.active .stage-icon{border-color:var(--cyan);color:var(--cyan);animation:pulse 1s infinite}.stage.skipped{opacity:.48}.stage.skipped .stage-icon{color:#5b7084;border-color:#33485b}.stage-num{color:var(--cyan);font-size:.6rem;font-weight:950;letter-spacing:.1em}.stage-name{margin-top:.35rem;font-size:.65rem;font-weight:900;white-space:nowrap}.stage-note{margin-top:.3rem;color:#8299ad;font-size:.57rem;line-height:1.3}@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(66,200,238,0)}}
     .authority{height:100%;min-height:305px;padding:1.2rem;border:1px solid rgba(85,227,154,.4);border-radius:20px;background:radial-gradient(circle at 90% 5%,rgba(85,227,154,.1),transparent 35%),linear-gradient(145deg,rgba(15,62,45,.34),rgba(6,18,26,.98));box-shadow:0 18px 45px rgba(0,0,0,.2)}.authority-label{color:var(--green);font-size:.63rem;font-weight:950;letter-spacing:.13em;text-transform:uppercase}.authority-id{margin-top:.6rem;font-size:clamp(2rem,3.4vw,3rem);font-weight:950;line-height:1;letter-spacing:-.055em}.decision-pill{display:inline-block;margin-top:.55rem;padding:.35rem .62rem;border-radius:999px;border:1px solid rgba(85,227,154,.35);color:#c8f5d9;font-size:.6rem;font-weight:950;letter-spacing:.08em}.decision-pill.uncertain{color:#f5cf82;border-color:rgba(241,189,99,.4)}.decision-pill.new{color:#90dcf2;border-color:rgba(66,200,238,.4)}.authority-score{margin-top:.85rem;color:var(--green);font-size:1.15rem;font-weight:900}.authority-explain{margin-top:.25rem;color:#91a8ba;font-size:.64rem;line-height:1.4}.empty-authority{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;color:#71869a}.empty-authority .authority-id{color:#6f8498;font-size:1.7rem}
     .glance{margin-top:.7rem;padding:.85rem;border:1px solid var(--line);border-radius:14px;background:rgba(7,16,28,.72)}.glance-title{color:#b5c5d4;font-size:.6rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.glance-row{display:flex;justify-content:space-between;gap:.5rem;padding:.36rem 0;border-bottom:1px solid rgba(145,168,190,.08);font-size:.62rem}.glance-row:last-child{border-bottom:0}.glance-row span:first-child{color:#8198ac}.glance-row span:last-child{color:#d9e3eb;text-align:right}
     .result-section{margin-top:1rem}.result-head{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:.65rem}.result-head h2{margin:0;font-size:1.35rem;letter-spacing:-.03em}.result-head p{margin:0;color:var(--muted);font-size:.67rem;text-align:right}.evidence-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}.evidence{padding:.8rem;border:1px solid var(--line);border-radius:14px;background:rgba(8,18,31,.78)}.evidence-label{color:#91a8bd;font-size:.59rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase}.evidence-value{margin-top:.4rem;color:#e3ebf2;font-size:.68rem;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
     .advisory{margin-top:.8rem;padding:1rem;border:1px solid rgba(185,147,255,.22);border-radius:18px;background:linear-gradient(145deg,rgba(42,27,65,.16),rgba(7,15,26,.94))}.advisory-head{font-size:.95rem;font-weight:950}.advisory-head span{color:var(--purple)}.advisory-note{margin-top:.25rem;color:var(--muted);font-size:.66rem}.advisory-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-top:.7rem}.advisory-card{padding:.75rem;border:1px solid rgba(185,147,255,.2);border-radius:14px;background:rgba(10,17,29,.82)}.advisory-label{color:var(--purple);font-size:.6rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
     .footer{margin-top:1.4rem;padding-top:.8rem;border-top:1px solid var(--line);color:#62798f;font-size:.58rem;letter-spacing:.04em}
-    div[data-testid="stButton"] button{border-radius:10px;font-weight:800;border:1px solid var(--line);min-height:2.35rem}div[data-testid="stButton"] button[kind="primary"]{background:linear-gradient(90deg,#20a7db,#2bc2ec);border:0;color:#04111b;box-shadow:0 8px 22px rgba(40,190,235,.16)}
+    div[data-testid="stButton"] button{border-radius:10px;font-weight:800;border:1px solid var(--line);min-height:2.35rem;white-space:nowrap;font-size:.72rem;padding:.4rem .35rem}div[data-testid="stButton"] button[kind="primary"]{background:linear-gradient(90deg,#20a7db,#2bc2ec);border:0;color:#04111b;box-shadow:0 8px 22px rgba(40,190,235,.16)}
     textarea{border-radius:12px!important}.stAlert{border-radius:12px}.stExpander{border-color:var(--line);border-radius:13px}
     @media(max-width:1150px){.flow{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:.55rem}.stage:not(:last-child):after{display:none}.authority{min-height:260px}.hero-title{font-size:clamp(2rem,5vw,3rem)}}
     @media(max-width:760px){.block-container{padding:.65rem .55rem 1.2rem}.hero{border-radius:17px;padding:1rem}.hero-title{font-size:2rem}.architecture-grid,.advisory-grid,.evidence-grid{grid-template-columns:1fr}.flow{grid-template-columns:repeat(2,minmax(0,1fr))}.stage{min-height:82px}.pipeline{padding:.7rem}.authority{min-height:230px}.result-head{display:block}.result-head p{text-align:left;margin-top:.3rem}.side-note{font-size:.65rem}}
@@ -206,14 +206,15 @@ def _render_input(ai_enabled: bool) -> str:
     return description
 
 
-def _render_pipeline(completed: tuple[str, ...] = (), active: str | None = None, container: Any | None = None) -> None:
+def _render_pipeline(completed: tuple[str, ...] = (), active: str | None = None, container: Any | None = None, ai_enabled: bool = True) -> None:
     target = container or st
     html = '<div class="pipeline"><div class="pipeline-head"><span>Processing Pipeline</span><small>deterministic authority preserved</small></div><div class="flow">'
     completed_set = set(completed)
     for num, name, note, key in PIPELINE_STAGES:
-        state = "done" if key in completed_set else "active" if key == active else ""
-        icon = "✓" if state == "done" else "•" if state == "active" else ""
-        html += f'<div class="stage {state}"><span class="stage-icon">{icon}</span><div class="stage-num">{num}</div><div class="stage-name">{name}</div><div class="stage-note">{note}</div></div>'
+        disabled_ai = key == "ai_advisory" and not ai_enabled
+        state = "skipped" if disabled_ai else "done" if key in completed_set else "active" if key == active else ""
+        icon = "—" if state == "skipped" else "✓" if state == "done" else "•" if state == "active" else ""
+        html += f'<div class="stage {state}"><span class="stage-icon">{icon}</span><div class="stage-num">{num}</div><div class="stage-name">{name}</div><div class="stage-note">{note if not disabled_ai else "Disabled in current mode"}</div></div>'
     html += '</div></div>'
     target.markdown(html, unsafe_allow_html=True)
 
@@ -312,15 +313,17 @@ def main() -> None:
                 st.session_state["analysis_result"] = None
                 st.session_state["pipeline_completed"] = ()
                 pipeline_placeholder = center.empty()
-                _render_pipeline((), "input", pipeline_placeholder)
+                _render_pipeline((), "input", pipeline_placeholder, ai_enabled)
                 try:
                     def on_progress(stage: str) -> None:
                         completed = list(st.session_state.get("pipeline_completed", ()))
+                        if stage == "ai_advisory" and not ai_enabled:
+                            return
                         if stage not in completed:
                             completed.append(stage)
                         st.session_state["pipeline_completed"] = tuple(completed)
-                        remaining = next((key for _, _, _, key in PIPELINE_STAGES if key not in completed), None)
-                        _render_pipeline(tuple(completed), remaining, pipeline_placeholder)
+                        remaining = next((key for _, _, _, key in PIPELINE_STAGES if key not in completed and (key != "ai_advisory" or ai_enabled)), None)
+                        _render_pipeline(tuple(completed), remaining, pipeline_placeholder, ai_enabled)
 
                     st.session_state["analysis_result"] = analyze_material(
                         description,
@@ -329,7 +332,9 @@ def main() -> None:
                         progress_callback=on_progress,
                     )
                     st.session_state["analysis_mode"] = ai_enabled
-                    _render_pipeline(tuple(stage[3] for stage in PIPELINE_STAGES), None, pipeline_placeholder)
+                    completed_stages = tuple(stage[3] for stage in PIPELINE_STAGES if stage[3] != "ai_advisory" or ai_enabled)
+                    st.session_state["pipeline_completed"] = completed_stages
+                    _render_pipeline(completed_stages, None, pipeline_placeholder, ai_enabled)
                     st.rerun()
                 except (OSError, TypeError, ValueError):
                     st.session_state["analysis_result"] = None
@@ -337,7 +342,7 @@ def main() -> None:
                     st.error("The description could not be processed safely. Please check the input and try again.")
     with center:
         if not analyze:
-            _render_pipeline(st.session_state.get("pipeline_completed", ()), None)
+            _render_pipeline(st.session_state.get("pipeline_completed", ()), None, None, ai_enabled)
         if mode_changed:
             st.warning("Analysis mode changed. Re-analyze to generate evidence for the current mode.")
         if previous_result is None:
