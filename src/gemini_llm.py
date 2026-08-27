@@ -93,7 +93,6 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                                         "matching_attributes",
                                         "conflicting_attributes",
                                         "missing_attributes",
-                                        "technical_compatible",
                                         "reason",
                                     ],
                                 },
@@ -159,10 +158,12 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
             "Technical attributes matter. Compare only the normalized description, explicit input attributes, "
             "and supplied catalog candidates. Do not invent missing specifications. Identify matching, conflicting, "
             "and missing attributes. Set technical_compatible=true only when the supplied technical evidence "
-            "supports equivalence and there are no unresolved critical conflicts. Set it false when a material or "
-            "technical conflict rules out equivalence. Do not make a final MATCHED/UNCERTAIN/NEW_CANDIDATE decision, "
-            "do not provide confidence or probability, and do not override deterministic authority. Use only supplied "
-            "canonical material IDs. Return at most 5 candidates.\n\n"
+            "supports equivalence and there are no unresolved critical conflicts. Set technical_compatible=false "
+            "only when explicit technical evidence rules out equivalence. If compatibility cannot be established "
+            "because evidence is incomplete, omit technical_compatible rather than treating missing information as "
+            "a conflict. Do not make a final MATCHED/UNCERTAIN/NEW_CANDIDATE decision, do not provide confidence or "
+            "probability, and do not override deterministic authority. Use only supplied canonical material IDs. "
+            "Return at most 5 candidates.\n\n"
             f"Normalized description: {normalized_description}\n"
             f"Explicit input attributes: {cls._attributes_dict(attributes)}\n"
             f"Allowed catalog candidates: {candidates}\n"
