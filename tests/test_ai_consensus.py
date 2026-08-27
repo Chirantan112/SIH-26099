@@ -82,12 +82,18 @@ class AIConsensusTests(unittest.TestCase):
         self.assertNotEqual(result.ai_consensus.conclusion, "NEW_CANDIDATE")
         self.assertEqual(result.mapping_result.decision, "UNCERTAIN")
 
-    def test_explicit_critical_conflict_from_all_plausible_candidates_is_new_candidate(self):
-        local = evidence("local_embedding", "VAL-002", False, conflicts=("pressure_class",))
-        gemini = evidence("gemini", "VAL-002", False, conflicts=("pressure_class",))
-        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL150", CATALOG, retrieval_adapter=RetrievalStub((local,)), llm_adapter=GeminiStub((gemini,)))
+    def test_explicit_critical_conflict_from_all_supplied_candidates_is_new_candidate(self):
+        local_one = evidence("local_embedding", "VAL-001", False, conflicts=("pressure_class",))
+        local_two = evidence("local_embedding", "VAL-002", False, conflicts=("pressure_class",))
+        gemini_one = evidence("gemini", "VAL-001", False, conflicts=("pressure_class",))
+        gemini_two = evidence("gemini", "VAL-002", False, conflicts=("pressure_class",))
+        result = run_hybrid_pipeline(
+            "CS GATE VLV 50MM FLG CL600",
+            CATALOG,
+            retrieval_adapter=RetrievalStub((local_one, local_two)),
+            llm_adapter=GeminiStub((gemini_one, gemini_two)),
+        )
         self.assertEqual(result.ai_consensus.conclusion, "NEW_CANDIDATE")
-        self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
 
     def test_no_candidates_with_available_ai_is_uncertain_when_no_negative_evidence_exists(self):
         result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL150", CATALOG, retrieval_adapter=RetrievalStub(()), llm_adapter=GeminiStub(()))
@@ -181,6 +187,34 @@ class AIConsensusTests(unittest.TestCase):
         self.assertIsNone(compatible)
         self.assertEqual(conflicts, ())
         self.assertEqual(missing, ())
+
+    def test_realistic_dataset_description_is_matched(self):
+        result = run_hybrid_pipeline(
+            "50 mm Carbon Steel gate valve, class 150 FLANGED",
+            CATALOG,
+            retrieval_adapter=RetrievalStub(()),
+            llm_adapter=GeminiStub(()),
+        )
+        self.assertEqual(result.mapping_result.decision, "MATCHED")
+        self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
+
+    def test_realistic_partial_description_is_uncertain(self):
+        result = run_hybrid_pipeline(
+            "CS GATE VALVE 50 MM FLG",
+            CATALOG,
+            retrieval_adapter=RetrievalStub(()),
+            llm_adapter=GeminiStub(()),
+        )
+        self.assertEqual(result.mapping_result.decision, "UNCERTAIN")
+
+    def test_realistic_unsupported_specification_is_new_candidate_deterministically(self):
+        result = run_hybrid_pipeline(
+            "CS GATE VALVE 50 MM 600# FLG",
+            CATALOG,
+            retrieval_adapter=RetrievalStub(()),
+            llm_adapter=GeminiStub(()),
+        )
+        self.assertEqual(result.mapping_result.decision, "NEW_CANDIDATE")
 
 
 if __name__ == "__main__":
