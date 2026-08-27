@@ -3,7 +3,7 @@
 Gemini is advisory only. The deterministic LEGO #2-#5 mapping remains the sole
 source of truth for MappingResult. The adapter uses structured JSON output and
 returns technical evidence, but never asks the model for a final mapping
- decision or a confidence/probability value.
+decision or a confidence/probability value.
 """
 
 from __future__ import annotations
@@ -195,9 +195,9 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 continue
             canonical_id = item.get("canonical_material_id")
             reason = item.get("reason")
-            matching = item.get("matching_attributes")
-            conflicting = item.get("conflicting_attributes")
-            missing = item.get("missing_attributes")
+            matching = item.get("matching_attributes", [])
+            conflicting = item.get("conflicting_attributes", [])
+            missing = item.get("missing_attributes", [])
             compatible = item.get("technical_compatible")
             if not isinstance(canonical_id, str) or not canonical_id.strip():
                 continue
@@ -205,7 +205,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 continue
             if not all(isinstance(value, list) and all(isinstance(x, str) for x in value) for value in (matching, conflicting, missing)):
                 continue
-            if not isinstance(compatible, bool):
+            if compatible is not None and not isinstance(compatible, bool):
                 continue
             if canonical_id not in known_ids or canonical_id in seen:
                 continue
@@ -213,11 +213,12 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
             if not isfinite(score) or not 0.0 <= score <= 1.0:
                 continue
             seen.add(canonical_id)
+            compatibility_text = "unknown" if compatible is None else ("yes" if compatible else "no")
             evidence = (
                 f"{reason.strip()} Matching: {', '.join(matching) or 'none'}. "
                 f"Conflicts: {', '.join(conflicting) or 'none'}. "
                 f"Missing: {', '.join(missing) or 'none'}. "
-                f"Technically compatible: {'yes' if compatible else 'no'}. "
+                f"Technically compatible: {compatibility_text}. "
                 "[Advisory rank only; NON-PROBABILISTIC and NON-AUTHORITATIVE.]"
             )
             suggestions.append(
