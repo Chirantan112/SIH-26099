@@ -91,8 +91,6 @@ def _valid_suggestions(
             continue
         valid.append(suggestion)
 
-    # This deterministic ordering is only presentation/audit metadata.  It does
-    # not feed into map_records or alter the final deterministic decision.
     return tuple(sorted(valid, key=lambda item: (-item.score, item.canonical_material_id, item.source)))[:MAX_AI_CANDIDATE_SUGGESTIONS]
 
 
@@ -102,18 +100,29 @@ def run_hybrid_pipeline(
     legacy_material_code: str = "HYBRID-INPUT",
     retrieval_adapter: RetrievalAdapter | None = None,
     llm_adapter: LLMInterpretationAdapter | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> HybridResult:
-    """Run AI advice safely around the unchanged deterministic LEGO #2-#5 flow."""
+    """Run the existing deterministic flow with an optional execution-progress hook."""
+
+    def _report(stage: str) -> None:
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(stage)
+        except Exception:
+            pass
 
     retrieval = retrieval_adapter or UnavailableRetrievalAdapter()
     llm = llm_adapter or UnavailableLLMAdapter()
+    _report("input")
     normalization = normalize_description(raw_description)
+    _report("normalize")
     extraction = extract_attributes(raw_description)
+    _report("extract")
     mapping_input = raw_description if normalization.normalized_text else ""
 
-    # This is intentionally the same full-catalog deterministic mapping used by
-    # LEGO #5; AI suggestions cannot filter, rank, or override it.
     mapping_result = map_records((LegacyRecord(legacy_material_code, mapping_input),), catalog)[0]
+    _report("match")
 
     retrieval_status = _safe_status("local_nlp", retrieval)
     llm_status = _safe_status("llm", llm)
@@ -129,6 +138,7 @@ def run_hybrid_pipeline(
         lambda adapter: adapter.interpret(raw_description, normalization.normalized_text, extraction.attributes, catalog),
         llm_status,
     )
+    _report("ai_advisory")
     suggestions = _valid_suggestions(retrieval_suggestions + llm_suggestions, catalog)
     statuses = (retrieval_status, llm_status)
     fallback_used = not all(status.available for status in statuses)
@@ -137,7 +147,7 @@ def run_hybrid_pipeline(
         if fallback_used
         else "Deterministic LEGO #2-#5 mapping verified all advisory AI suggestions."
     )
-    return HybridResult(
+    result = HybridResult(
         legacy_material_code=legacy_material_code,
         normalized_description=normalization.normalized_text,
         normalization_transformations=normalization.transformations,
@@ -149,3 +159,5 @@ def run_hybrid_pipeline(
         fallback_information=fallback_information,
         explanation="AI suggestions are advisory only; final mapping is the unchanged deterministic LEGO #4/#5 result.",
     )
+    _report("decide")
+    return result
