@@ -96,7 +96,14 @@ class GeminiLLMAdapterTests(unittest.TestCase):
 ```"""
         adapter, _ = self._adapter(payload)
         result = adapter.interpret("CS GATE VLV 50MM FLG CL150", "CS GATE VLV 50MM FLG CL150", object(), CATALOG)
-        self.assertEqual([(item.canonical_material_id, item.explanation.split(" [Advisory")[0]) for item in result], [("VAL-001", "It is a gate valve.")])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].canonical_material_id, "VAL-001")
+        self.assertIn("It is a gate valve.", result[0].explanation)
+        self.assertIn("Matching: none.", result[0].explanation)
+        self.assertIn("Conflicts: none.", result[0].explanation)
+        self.assertIn("Missing: none.", result[0].explanation)
+        self.assertIn("Technically compatible: unknown.", result[0].explanation)
+        self.assertIn("[Advisory rank only; NON-PROBABILISTIC and NON-AUTHORITATIVE.]", result[0].explanation)
     def test_completed_markdown_bullet_list_is_rejected(self):
         adapter, _ = self._adapter("* VAL-001: General category match.\n* VAL-002: Matches gate valve type.")
         self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
