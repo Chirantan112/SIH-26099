@@ -25,6 +25,9 @@ MAX_CANDIDATES = 5
 _PRODUCTION_MODEL_CACHE: dict[str, Any] = {}
 _PRODUCTION_CATALOG_CACHE: dict[tuple[str, tuple[str, ...]], tuple[tuple[float, ...], ...]] = {}
 
+# These are the critical fields already represented by the repository's
+# deterministic linkage model. Missing critical evidence is unresolved, not a
+# technical conflict. In particular, do not invent new schema fields here.
 _REQUIRED_FIELDS = {
     "Valve": ("valve_type", "material", "size_mm", "pressure_class", "connection"),
     "Bearing": ("bearing_family", "dimensions", "dimension_unit_present"),
@@ -223,14 +226,26 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
         return max(-1.0, min(1.0, float(score)))
 
     @staticmethod
-    def _technical_evidence(left: Any, right: Any) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], bool | None]:
+    def _technical_evidence(
+        left: Any,
+        right: Any,
+    ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], bool | None]:
+        """Separate explicit conflicts from incomplete technical evidence.
+
+        False means a known technical fact rules the candidate out. None means
+        compatibility cannot be established because required evidence is missing
+        or unavailable. True requires all category-critical fields to be known and
+        equal. This deliberately mirrors the repository's deterministic linkage
+        semantics without changing that authoritative implementation.
+        """
         if not is_dataclass(left) or not is_dataclass(right):
             return (), (), (), None
+
         matching: list[str] = []
         conflicting: list[str] = []
         missing: list[str] = []
-        field_names = [field.name for field in fields(left)]
-        for name in field_names:
+        for field in fields(left):
+            name = field.name
             a = getattr(left, name, None)
             b = getattr(right, name, None)
             if a is not None and b is not None:
@@ -240,21 +255,40 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
                     conflicting.append(name)
             elif a is not None or b is not None:
                 missing.append(name)
+
         category = getattr(left, "category", None)
         candidate_category = getattr(right, "category", None)
         if category is None or candidate_category is None:
             compatible: bool | None = None
+        elif category != candidate_category:
+            compatible = False
         else:
             required = _REQUIRED_FIELDS.get(str(category), ())
-            compatible = (
-                category == candidate_category
-                and not conflicting
-                and all(getattr(left, name, None) is not None and getattr(right, name, None) is not None and getattr(left, name) == getattr(right, name) for name in required)
-            )
+            if not required:
+                compatible = None
+            else:
+                critical_conflicts = [name for name in required if name in conflicting]
+                critical_missing = [
+                    name
+                    for name in required
+                    if getattr(left, name, None) is None or getattr(right, name, None) is None
+                ]
+                if critical_conflicts:
+                    compatible = False
+                elif critical_missing:
+                    compatible = None
+                else:
+                    compatible = True
+
         return tuple(sorted(matching)), tuple(sorted(conflicting)), tuple(sorted(missing)), compatible
 
     @staticmethod
-    def _technical_note(matching: tuple[str, ...], conflicting: tuple[str, ...], missing: tuple[str, ...], compatible: bool | None) -> str:
+    def _technical_note(
+        matching: tuple[str, ...],
+        conflicting: tuple[str, ...],
+        missing: tuple[str, ...],
+        compatible: bool | None,
+    ) -> str:
         parts = []
         if matching:
             parts.append("matching=" + ",".join(matching))
@@ -265,7 +299,7 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
         if compatible is True:
             parts.append("technically compatible")
         elif compatible is False:
-            parts.append("not technically compatible")
+            parts.append("explicit technical incompatibility")
         else:
             parts.append("technical compatibility unresolved")
         return "Technical evidence: " + "; ".join(parts)
