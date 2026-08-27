@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import unittest
 
 from src.ai_retrieval import AdapterStatus, CandidateSuggestion
@@ -123,9 +124,25 @@ class AIConsensusTests(unittest.TestCase):
             status = "completed"
             output_text = "not-json"
 
-        adapter = GeminiLLMAdapter(client_factory=lambda _key: object())
-        suggestions = adapter._parse_response(Response(), CATALOG)
-        self.assertEqual(suggestions, ())
+        class FakeInteractions:
+            def create(self, **_kwargs):
+                return Response()
+
+        class FakeClient:
+            interactions = FakeInteractions()
+
+        previous = os.environ.get("GEMINI_API_KEY")
+        os.environ["GEMINI_API_KEY"] = "test-key"
+        try:
+            adapter = GeminiLLMAdapter(client_factory=lambda _key: FakeClient())
+            suggestions = adapter.interpret(None, "valve gate carbon steel", MaterialAttributes(category="Valve"), CATALOG)
+            self.assertEqual(suggestions, ())
+            self.assertFalse(adapter.status().available)
+        finally:
+            if previous is None:
+                os.environ.pop("GEMINI_API_KEY", None)
+            else:
+                os.environ["GEMINI_API_KEY"] = previous
 
     def test_local_technical_evidence_exact_agreement_is_true(self):
         left = extract_attributes("CS GATE VLV 50MM FLG CL150").attributes
