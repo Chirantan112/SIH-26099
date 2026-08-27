@@ -6,7 +6,7 @@ from dataclasses import fields
 from decimal import Decimal
 from html import escape
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from src.ai_retrieval import CandidateSuggestion, UnavailableRetrievalAdapter
 from src.attribute_extraction import MaterialAttributes
@@ -44,6 +44,15 @@ ATTRIBUTE_LABELS = {
     "dimension_unit_present": "Dimension unit stated", "od_mm": "Outside diameter (mm)",
     "thickness_mm": "Thickness (mm)", "schedule": "Schedule", "end": "End",
 }
+
+PIPELINE_STAGES = (
+    ("01", "INPUT", "Legacy description", "input"),
+    ("02", "NORMALIZE", "Canonical text", "normalize"),
+    ("03", "EXTRACT", "Technical attributes", "extract"),
+    ("04", "MATCH", "Deterministic mapping", "match"),
+    ("05", "AI ADVISE", "Advisory intelligence", "ai_advisory"),
+    ("06", "DECIDE", "Authoritative result", "decide"),
+)
 
 
 def _display_value(value: Any) -> str:
@@ -89,14 +98,28 @@ def _analysis_adapters(ai_enabled: bool) -> tuple[Any, Any]:
     return retrieval, llm
 
 
-def analyze_material(description: str | None, catalog: tuple[Any, ...], ai_enabled: bool, retrieval_adapter: Any | None = None, llm_adapter: Any | None = None) -> HybridResult:
+def analyze_material(
+    description: str | None,
+    catalog: tuple[Any, ...],
+    ai_enabled: bool,
+    retrieval_adapter: Any | None = None,
+    llm_adapter: Any | None = None,
+    progress_callback: Callable[[str], None] | None = None,
+) -> HybridResult:
     """Run the existing hybrid orchestration; the deterministic result stays authoritative."""
     if not ai_enabled:
         retrieval_adapter = UnavailableRetrievalAdapter("AI advisory is disabled.")
         llm_adapter = UnavailableLLMAdapter("AI advisory is disabled.")
     elif retrieval_adapter is None or llm_adapter is None:
         retrieval_adapter, llm_adapter = _analysis_adapters(True)
-    return run_hybrid_pipeline(description, catalog, legacy_material_code="DASHBOARD-INPUT", retrieval_adapter=retrieval_adapter, llm_adapter=llm_adapter)
+    return run_hybrid_pipeline(
+        description,
+        catalog,
+        legacy_material_code="DASHBOARD-INPUT",
+        retrieval_adapter=retrieval_adapter,
+        llm_adapter=llm_adapter,
+        progress_callback=progress_callback,
+    )
 
 
 def _inject_styles() -> None:
@@ -111,7 +134,7 @@ def _inject_styles() -> None:
     .brand{font-size:1rem;font-weight:950;line-height:1.03;letter-spacing:-.02em}.sub{margin-top:.4rem;color:var(--muted);font-size:.68rem}
     .side-kicker{margin-top:1.15rem;margin-bottom:.45rem;color:#8ea6bd;font-size:.62rem;font-weight:900;letter-spacing:.15em;text-transform:uppercase}
     .side-row{display:flex;align-items:center;gap:.45rem;padding:.5rem 0;border-bottom:1px solid rgba(145,168,190,.09);font-size:.73rem}.side-right{margin-left:auto;color:#9db1c4;font-size:.6rem;font-weight:850;letter-spacing:.06em}.side-note{color:var(--muted);font-size:.67rem;line-height:1.45}
-    .dot-green{color:var(--green)}.dot-purple{color:var(--purple)}
+    .dot-green{color:var(--green)}.dot-purple{color:var(--purple)}.dot-cyan{color:var(--cyan)}.dot-amber{color:var(--amber)}
     .hero{position:relative;overflow:hidden;padding:clamp(1.25rem,2.5vw,1.9rem);border:1px solid var(--line);border-radius:24px;background:linear-gradient(135deg,rgba(12,37,57,.96),rgba(5,14,24,.98) 74%);box-shadow:0 24px 60px rgba(0,0,0,.22)}
     .hero:after{content:"";position:absolute;right:-10%;top:-65%;width:45%;height:220%;transform:rotate(18deg);background:linear-gradient(90deg,transparent,rgba(66,200,238,.035),transparent);pointer-events:none}
     .eyebrow,.section-kicker{color:#a9bacb;font-size:.63rem;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.hero-title{margin-top:.42rem;font-size:clamp(2.05rem,4.4vw,3.8rem);font-weight:950;line-height:.98;letter-spacing:-.06em}.hero-sub{max-width:1080px;margin-top:.7rem;color:#9db1c4;font-size:clamp(.86rem,1.35vw,1rem);line-height:1.55}.pills{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}.pill{padding:.36rem .7rem;border:1px solid var(--line);border-radius:999px;color:#d2dde7;background:rgba(255,255,255,.025);font-size:.64rem;font-weight:850}.pill.online{color:var(--green);border-color:rgba(85,227,154,.3)}
@@ -120,7 +143,7 @@ def _inject_styles() -> None:
     .card{padding:1rem;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,rgba(12,27,44,.96),rgba(7,17,29,.96));box-shadow:0 12px 28px rgba(0,0,0,.14)}
     .service-card{min-height:108px}.service-kicker{color:#9fb2c4;font-size:.6rem;font-weight:900;letter-spacing:.11em}.service-main{margin-top:.55rem;font-size:.95rem;font-weight:950}.service-main.green{color:var(--green)}.service-main.purple{color:var(--purple)}.service-note{margin-top:.35rem;color:var(--muted);font-size:.69rem;line-height:1.4}
     .input-card{padding:1rem;border:1px solid var(--line);border-radius:18px;background:rgba(8,18,31,.84)}.input-label{font-size:.78rem;font-weight:900}.scenario-label{margin-top:.7rem;color:#91a7bc;font-size:.63rem;font-weight:800}.scenario-buttons{display:flex;gap:.45rem;flex-wrap:wrap}
-    .pipeline{margin-top:.8rem;padding:.9rem;border:1px solid var(--line);border-radius:18px;background:rgba(6,15,26,.9)}.pipeline-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}.pipeline-head span{color:#aebfd0;font-size:.63rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.pipeline-head small{color:#637b92;font-size:.61rem}.flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.4rem}.stage{min-width:0;padding:.72rem .55rem;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0b1929,#07111e);position:relative}.stage:not(:last-child):after{content:"→";position:absolute;right:-.42rem;top:50%;transform:translateY(-50%);z-index:2;color:#5d7891;font-size:.8rem}.stage-num{color:var(--cyan);font-size:.6rem;font-weight:950;letter-spacing:.1em}.stage-name{margin-top:.35rem;font-size:.65rem;font-weight:900;white-space:nowrap}.stage-note{margin-top:.3rem;color:#8299ad;font-size:.57rem;line-height:1.3}.stage.final{border-color:rgba(85,227,154,.27)}
+    .pipeline{margin-top:.8rem;padding:.9rem;border:1px solid var(--line);border-radius:18px;background:rgba(6,15,26,.9)}.pipeline-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}.pipeline-head span{color:#aebfd0;font-size:.63rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.pipeline-head small{color:#637b92;font-size:.61rem}.flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.4rem}.stage{min-width:0;padding:.72rem .55rem;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0b1929,#07111e);position:relative;transition:border-color .15s,background .15s,box-shadow .15s}.stage:not(:last-child):after{content:"→";position:absolute;right:-.42rem;top:50%;transform:translateY(-50%);z-index:2;color:#5d7891;font-size:.8rem}.stage-icon{float:right;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid #334b60;color:#637b92;font-size:.75rem;font-weight:950}.stage.done{border-color:rgba(85,227,154,.55);background:linear-gradient(180deg,rgba(14,58,42,.72),rgba(7,27,24,.92));box-shadow:0 0 18px rgba(85,227,154,.09)}.stage.done .stage-icon{background:var(--green);border-color:var(--green);color:#062016}.stage.active{border-color:rgba(66,200,238,.65);box-shadow:0 0 20px rgba(66,200,238,.12)}.stage.active .stage-icon{border-color:var(--cyan);color:var(--cyan);animation:pulse 1s infinite}.stage-num{color:var(--cyan);font-size:.6rem;font-weight:950;letter-spacing:.1em}.stage-name{margin-top:.35rem;font-size:.65rem;font-weight:900;white-space:nowrap}.stage-note{margin-top:.3rem;color:#8299ad;font-size:.57rem;line-height:1.3}@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(66,200,238,0)}}
     .authority{height:100%;min-height:305px;padding:1.2rem;border:1px solid rgba(85,227,154,.4);border-radius:20px;background:radial-gradient(circle at 90% 5%,rgba(85,227,154,.1),transparent 35%),linear-gradient(145deg,rgba(15,62,45,.34),rgba(6,18,26,.98));box-shadow:0 18px 45px rgba(0,0,0,.2)}.authority-label{color:var(--green);font-size:.63rem;font-weight:950;letter-spacing:.13em;text-transform:uppercase}.authority-id{margin-top:.6rem;font-size:clamp(2rem,3.4vw,3rem);font-weight:950;line-height:1;letter-spacing:-.055em}.decision-pill{display:inline-block;margin-top:.55rem;padding:.35rem .62rem;border-radius:999px;border:1px solid rgba(85,227,154,.35);color:#c8f5d9;font-size:.6rem;font-weight:950;letter-spacing:.08em}.decision-pill.uncertain{color:#f5cf82;border-color:rgba(241,189,99,.4)}.decision-pill.new{color:#90dcf2;border-color:rgba(66,200,238,.4)}.authority-score{margin-top:.85rem;color:var(--green);font-size:1.15rem;font-weight:900}.authority-explain{margin-top:.25rem;color:#91a8ba;font-size:.64rem;line-height:1.4}.empty-authority{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;color:#71869a}.empty-authority .authority-id{color:#6f8498;font-size:1.7rem}
     .glance{margin-top:.7rem;padding:.85rem;border:1px solid var(--line);border-radius:14px;background:rgba(7,16,28,.72)}.glance-title{color:#b5c5d4;font-size:.6rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.glance-row{display:flex;justify-content:space-between;gap:.5rem;padding:.36rem 0;border-bottom:1px solid rgba(145,168,190,.08);font-size:.62rem}.glance-row:last-child{border-bottom:0}.glance-row span:first-child{color:#8198ac}.glance-row span:last-child{color:#d9e3eb;text-align:right}
     .result-section{margin-top:1rem}.result-head{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:.65rem}.result-head h2{margin:0;font-size:1.35rem;letter-spacing:-.03em}.result-head p{margin:0;color:var(--muted);font-size:.67rem;text-align:right}.evidence-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}.evidence{padding:.8rem;border:1px solid var(--line);border-radius:14px;background:rgba(8,18,31,.78)}.evidence-label{color:#91a8bd;font-size:.59rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase}.evidence-value{margin-top:.4rem;color:#e3ebf2;font-size:.68rem;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -146,7 +169,7 @@ def _render_sidebar() -> bool:
         ai_enabled = st.session_state.get("ai_enabled", False)
         st.markdown('<div class="side-kicker">Decision Authority</div><div class="side-row"><span class="dot-green">●</span> Deterministic Engine</div>', unsafe_allow_html=True)
         st.caption("AUTHORITATIVE · final decision source")
-        st.markdown('<div class="side-kicker">AI Services</div><div class="side-row"><span class="dot-purple">●</span> Local NLP <span class="side-right">ADVISORY</span></div><div class="side-row"><span class="dot-purple">●</span> Gemini 2.5 Flash <span class="side-right">LLM · ADVISORY</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-kicker">AI Services</div><div class="side-row"><span class="dot-purple">●</span> 🧠 Local NLP <span class="side-right">ADVISORY</span></div><div class="side-row"><span class="dot-purple">●</span> Gemini 2.5 Flash <span class="side-right">LLM · ADVISORY</span></div>', unsafe_allow_html=True)
         st.markdown('<div class="side-note">AI advisory is optional. Disabled mode does not invoke Local NLP or Gemini.</div>', unsafe_allow_html=True)
         st.markdown('<div class="side-kicker">Demo</div><div class="side-note">Use the quick scenarios in the workspace to demonstrate matched, uncertain, and new-candidate outcomes.</div>', unsafe_allow_html=True)
         return ai_enabled
@@ -160,7 +183,7 @@ def _render_header(ai_enabled: bool) -> None:
 
 def _render_architecture() -> None:
     cols = st.columns(3)
-    cards = (("DETERMINISTIC ENGINE", "AUTHORITATIVE", "Final decision source", "green"), ("LOCAL NLP", "ADVISORY", "Optional local embedding retrieval", "purple"), ("GEMINI 2.5 FLASH", "LLM · ADVISORY", "Candidate reasoning", "purple"))
+    cards = (("DETERMINISTIC ENGINE", "✓ AUTHORITATIVE", "Final decision source", "green"), ("LOCAL NLP", "🧠 ADVISORY", "Optional local embedding retrieval", "purple"), ("GEMINI 2.5 FLASH", "LLM · ADVISORY", "Candidate reasoning", "purple"))
     for col, (kicker, main, note, color) in zip(cols, cards):
         with col:
             st.markdown(f'<div class="card service-card"><div class="service-kicker">{kicker}</div><div class="service-main {color}">{main}</div><div class="service-note">{note}</div></div>', unsafe_allow_html=True)
@@ -176,19 +199,23 @@ def _render_input(ai_enabled: bool) -> str:
             if st.button(outcome.title(), use_container_width=True, key=f"example_{outcome}"):
                 st.session_state["material_description"] = example
                 st.session_state["analysis_result"] = None
+                st.session_state["pipeline_completed"] = ()
                 st.rerun()
     description = st.text_area("Material Description", key="material_description", height=96, placeholder="Gate Valve Carbon Steel 150 50mm Flanged", help="Example: CS GATE VLV 50MM FLG CL150", label_visibility="collapsed")
     st.markdown('</div>', unsafe_allow_html=True)
     return description
 
 
-def _render_pipeline() -> None:
-    stages = (("01","INPUT","Legacy description"),("02","NORMALIZE","Canonical text"),("03","EXTRACT","Technical attributes"),("04","MATCH","Deterministic mapping"),("05","AI ADVISE","Local NLP + Gemini"),("06","DECIDE","Authoritative result"))
+def _render_pipeline(completed: tuple[str, ...] = (), active: str | None = None, container: Any | None = None) -> None:
+    target = container or st
     html = '<div class="pipeline"><div class="pipeline-head"><span>Processing Pipeline</span><small>deterministic authority preserved</small></div><div class="flow">'
-    for i, (num, name, note) in enumerate(stages):
-        html += f'<div class="stage {"final" if i == 5 else ""}"><div class="stage-num">{num}</div><div class="stage-name">{name}</div><div class="stage-note">{note}</div></div>'
+    completed_set = set(completed)
+    for num, name, note, key in PIPELINE_STAGES:
+        state = "done" if key in completed_set else "active" if key == active else ""
+        icon = "✓" if state == "done" else "•" if state == "active" else ""
+        html += f'<div class="stage {state}"><span class="stage-icon">{icon}</span><div class="stage-num">{num}</div><div class="stage-name">{name}</div><div class="stage-note">{note}</div></div>'
     html += '</div></div>'
-    st.markdown(html, unsafe_allow_html=True)
+    target.markdown(html, unsafe_allow_html=True)
 
 
 def _decision_class(decision: str) -> str:
@@ -230,7 +257,7 @@ def _render_analysis(result: HybridResult) -> None:
 def _render_advisory(result: HybridResult) -> None:
     local = tuple(x for x in result.ai_candidate_suggestions if x.source == "local_embedding")
     gemini = tuple(x for x in result.ai_candidate_suggestions if x.source == "gemini")
-    st.markdown('<div class="advisory"><div class="advisory-head"><span>AI Advisory</span> · advisory only</div><div class="advisory-note">AI suggestions are never used as the authoritative decision.</div><div class="advisory-grid"><div class="advisory-card"><div class="advisory-label">Local NLP · Embedding Retrieval</div></div><div class="advisory-card"><div class="advisory-label">Gemini 2.5 Flash · LLM</div></div></div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="advisory"><div class="advisory-head"><span>AI Advisory</span> · advisory only</div><div class="advisory-note">AI suggestions are never used as the authoritative decision.</div><div class="advisory-grid"><div class="advisory-card"><div class="advisory-label">🧠 Local NLP · Embedding Retrieval</div></div><div class="advisory-card"><div class="advisory-label">Gemini 2.5 Flash · LLM</div></div></div></div>', unsafe_allow_html=True)
     cols = st.columns(2)
     for col, rows in zip(cols, (local, gemini)):
         with col:
@@ -248,7 +275,8 @@ def _render_status(result: HybridResult | None, ai_enabled: bool) -> None:
     cols = st.columns(2)
     for col, status, label in zip(cols, statuses, ("Local NLP", "Gemini 2.5 Flash")):
         with col:
-            st.markdown(f'<div class="side-row"><span class="{"dot-green" if status.available else "amber"}">●</span> {label}<span class="side-right">{_friendly_status(status).upper()}</span></div>', unsafe_allow_html=True)
+            dot_class = "dot-green" if status.available else "dot-amber"
+            st.markdown(f'<div class="side-row"><span class="{dot_class}">●</span> {label}<span class="side-right">{_friendly_status(status).upper()}</span></div>', unsafe_allow_html=True)
 
 
 def main() -> None:
@@ -260,6 +288,7 @@ def main() -> None:
     st.session_state.setdefault("analysis_result", None)
     st.session_state.setdefault("analysis_mode", None)
     st.session_state.setdefault("material_description", "")
+    st.session_state.setdefault("pipeline_completed", ())
 
     ai_enabled = _render_sidebar()
     previous_result = st.session_state.get("analysis_result")
@@ -277,18 +306,38 @@ def main() -> None:
         if analyze:
             if not description or not description.strip():
                 st.session_state["analysis_result"] = None
+                st.session_state["pipeline_completed"] = ()
                 st.warning("Material description required. Enter a legacy description to begin.")
             else:
-                with st.spinner("Analyzing through the selected pipeline…"):
-                    try:
-                        st.session_state["analysis_result"] = analyze_material(description, load_demo_catalog(CATALOG_PATH), ai_enabled)
-                        st.session_state["analysis_mode"] = ai_enabled
-                        st.rerun()
-                    except (OSError, TypeError, ValueError):
-                        st.session_state["analysis_result"] = None
-                        st.error("The description could not be processed safely. Please check the input and try again.")
+                st.session_state["analysis_result"] = None
+                st.session_state["pipeline_completed"] = ()
+                pipeline_placeholder = center.empty()
+                _render_pipeline((), "input", pipeline_placeholder)
+                try:
+                    def on_progress(stage: str) -> None:
+                        completed = list(st.session_state.get("pipeline_completed", ()))
+                        if stage not in completed:
+                            completed.append(stage)
+                        st.session_state["pipeline_completed"] = tuple(completed)
+                        remaining = next((key for _, _, _, key in PIPELINE_STAGES if key not in completed), None)
+                        _render_pipeline(tuple(completed), remaining, pipeline_placeholder)
+
+                    st.session_state["analysis_result"] = analyze_material(
+                        description,
+                        load_demo_catalog(CATALOG_PATH),
+                        ai_enabled,
+                        progress_callback=on_progress,
+                    )
+                    st.session_state["analysis_mode"] = ai_enabled
+                    _render_pipeline(tuple(stage[3] for stage in PIPELINE_STAGES), None, pipeline_placeholder)
+                    st.rerun()
+                except (OSError, TypeError, ValueError):
+                    st.session_state["analysis_result"] = None
+                    st.session_state["pipeline_completed"] = ()
+                    st.error("The description could not be processed safely. Please check the input and try again.")
     with center:
-        _render_pipeline()
+        if not analyze:
+            _render_pipeline(st.session_state.get("pipeline_completed", ()), None)
         if mode_changed:
             st.warning("Analysis mode changed. Re-analyze to generate evidence for the current mode.")
         if previous_result is None:
