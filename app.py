@@ -256,7 +256,17 @@ def _render_analysis(result: HybridResult) -> None:
     with st.expander("Deterministic Candidate Evidence", expanded=False):
         candidates = result.mapping_result.all_candidates
         if candidates:
-            st.dataframe(candidate_rows(candidates), hide_index=True, use_container_width=True)
+            st.dataframe(
+      candidate_rows(candidates),
+      hide_index=True,
+      use_container_width=True,
+      column_config={
+          "Canonical material ID": st.column_config.TextColumn(width="medium"),
+          "Decision": st.column_config.TextColumn(width="medium"),
+          "Score": st.column_config.NumberColumn(width="small"),
+          "Explanation": st.column_config.TextColumn(width="large"),
+      },
+  )
         else:
             st.caption("No candidate evidence is available.")
     _render_ai_consensus(result)
@@ -288,7 +298,17 @@ def _render_advisory(result: HybridResult) -> None:
     for col, rows, status, score_label in zip(cols, (local, gemini), (local_status, gemini_status), ("Cosine Similarity", "Gemini Compatibility Score")):
         with col:
             if rows:
-                st.dataframe(advisory_rows(rows, score_label), hide_index=True, use_container_width=True)
+                st.dataframe(
+          advisory_rows(rows, score_label),
+          hide_index=True,
+          use_container_width=True,
+          column_config={
+              "Canonical material ID": st.column_config.TextColumn(width="medium"),
+              "Source": st.column_config.TextColumn(width="medium"),
+              score_label: st.column_config.NumberColumn(width="small"),
+              "Reason": st.column_config.TextColumn(width="large"),
+          },
+      )
             elif status is not None and not status.available:
                 st.caption(f"{_friendly_status(status)} — {status.detail}")
             elif status is not None and status.detail:
