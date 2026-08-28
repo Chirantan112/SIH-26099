@@ -19,11 +19,26 @@ from src.llm_interpretation import LLMInterpretationAdapter
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 MAX_CANDIDATES = 5
-_RANK_SCORES = (1.0, 0.8, 0.6, 0.4, 0.2)
+
+_FORBIDDEN_OUTPUT_FIELDS = {
+    "confidence",
+    "probability",
+    "score",
+    "decision",
+    "matched",
+    "uncertain",
+    "new_candidate",
+}
 
 
 class GeminiLLMAdapter(LLMInterpretationAdapter):
-    """Lazy, fault-tolerant Gemini technical candidate-evidence adapter."""
+    """Lazy, fault-tolerant Gemini technical candidate-evidence adapter.
+
+    ``compatibility_score`` is supplied by Gemini and preserved as a bounded
+    advisory assessment. It is not a calibrated probability or confidence and
+    is never authoritative. Technical evidence fields are optional; omitted
+    evidence is represented as empty/unknown rather than inferred.
+    """
 
     def __init__(
         self,
@@ -82,13 +97,14 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                                     "type": "object",
                                     "properties": {
                                         "canonical_material_id": {"type": "string"},
+                                        "compatibility_score": {"type": "number"},
                                         "matching_attributes": {"type": "array", "items": {"type": "string"}},
                                         "conflicting_attributes": {"type": "array", "items": {"type": "string"}},
                                         "missing_attributes": {"type": "array", "items": {"type": "string"}},
                                         "technical_compatible": {"type": "boolean"},
                                         "reason": {"type": "string"},
                                     },
-                                    "required": ["canonical_material_id", "reason"],
+                                    "required": ["canonical_material_id", "compatibility_score", "reason"],
                                 },
                             }
                         },
@@ -131,7 +147,11 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
         try:
             from dataclasses import fields, is_dataclass
             if is_dataclass(attributes):
-                return {field.name: getattr(attributes, field.name) for field in fields(attributes) if getattr(attributes, field.name) is not None}
+                return {
+                    field.name: getattr(attributes, field.name)
+                    for field in fields(attributes)
+                    if getattr(attributes, field.name) is not None
+                }
         except Exception:
             pass
         return {"value": repr(attributes)}
@@ -155,9 +175,11 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
             "supports equivalence and there are no unresolved critical conflicts. Set technical_compatible=false "
             "only when explicit technical evidence rules out equivalence. If compatibility cannot be established "
             "because evidence is incomplete, omit technical_compatible rather than treating missing information as "
-            "a conflict. Do not make a final MATCHED/UNCERTAIN/NEW_CANDIDATE decision, do not provide confidence or "
-            "probability, and do not override deterministic authority. Use only supplied canonical material IDs. "
-            "Return at most 5 candidates.\n\n"
+            "a conflict. For every candidate, return a compatibility_score from 0.0 through 1.0 that is your "
+            "technical compatibility assessment based only on the supplied evidence. This is an advisory assessment, "
+            "not a calibrated probability or confidence value. Do not return any separate confidence, probability, "
+            "score, or final decision field. Do not make a final MATCHED/UNCERTAIN/NEW_CANDIDATE decision and do not "
+            "override deterministic authority. Use only supplied canonical material IDs. Return at most 5 candidates.\n\n"
             f"Normalized description: {normalized_description}\n"
             f"Explicit input attributes: {cls._attributes_dict(attributes)}\n"
             f"Allowed catalog candidates: {candidates}\n"
@@ -188,13 +210,21 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 break
             if not isinstance(item, dict):
                 continue
+            if any(key in item for key in _FORBIDDEN_OUTPUT_FIELDS):
+                continue
             canonical_id = item.get("canonical_material_id")
+            raw_score = item.get("compatibility_score")
             reason = item.get("reason")
             matching = item.get("matching_attributes", [])
             conflicting = item.get("conflicting_attributes", [])
             missing = item.get("missing_attributes", [])
             compatible = item.get("technical_compatible")
             if not isinstance(canonical_id, str) or not canonical_id.strip():
+                continue
+            if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
+                continue
+            score = float(raw_score)
+            if not isfinite(score) or not 0.0 <= score <= 1.0:
                 continue
             if not isinstance(reason, str) or not reason.strip():
                 continue
@@ -204,9 +234,6 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 continue
             if canonical_id not in known_ids or canonical_id in seen:
                 continue
-            score = _RANK_SCORES[len(suggestions)]
-            if not isfinite(score) or not 0.0 <= score <= 1.0:
-                continue
             seen.add(canonical_id)
             compatibility_text = "unknown" if compatible is None else ("yes" if compatible else "no")
             evidence = (
@@ -214,7 +241,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 f"Conflicts: {', '.join(conflicting) or 'none'}. "
                 f"Missing: {', '.join(missing) or 'none'}. "
                 f"Technically compatible: {compatibility_text}. "
-                "[Advisory rank only; NON-PROBABILISTIC and NON-AUTHORITATIVE.]"
+                "[Gemini Compatibility Score is advisory only; NON-PROBABILISTIC and NON-AUTHORITATIVE.]"
             )
             suggestions.append(
                 CandidateSuggestion(
