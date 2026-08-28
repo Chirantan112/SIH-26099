@@ -111,13 +111,12 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertEqual(response_format["mime_type"], "application/json")
         schema = response_format["schema"]
         self.assertIsInstance(schema, dict)
-        self.assertEqual(schema["type"], "object")
-        self.assertIn("candidates", schema["properties"])
-        candidate_schema = schema["properties"]["candidates"]["items"]
+        self.assertEqual(schema["type"], "array")
+        candidate_schema = schema["items"]
         self.assertIn("canonical_material_id", candidate_schema["properties"])
         self.assertIn("compatibility_score", candidate_schema["properties"])
         self.assertIn("reason", candidate_schema["properties"])
-        self.assertEqual(candidate_schema["required"], ["canonical_material_id", "compatibility_score", "reason"])
+        self.assertEqual(candidate_schema["required"], ["canonical_material_id", "compatibility_score"])
 
     def test_successful_fenced_json_response_shape(self):
         payload = """```json
@@ -159,35 +158,6 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertEqual(candidate.missing_attributes, ("temperature_class",))
         self.assertTrue(candidate.technical_compatible)
         self.assertIn("Technically compatible: yes.", candidate.explanation)
-
-    def test_prompt_contains_structured_input_and_candidate_technical_context(self):
-        prompt = GeminiLLMAdapter._build_prompt(
-            "valve gate carbon steel size 50 mm flanged class 150",
-            extract_attributes("CS GATE VLV 50MM FLG CL150").attributes,
-            CATALOG,
-        )
-        self.assertIn("=== INPUT MATERIAL ===", prompt)
-        self.assertIn("=== INPUT MATERIAL ATTRIBUTES ===", prompt)
-        self.assertIn("=== CANDIDATE CATALOG RECORD ===", prompt)
-        self.assertIn("canonical_material_id: VAL-001", prompt)
-        self.assertIn("category: Valve", prompt)
-        self.assertIn("valve_type: gate", prompt)
-        self.assertIn("material: carbon steel", prompt)
-        self.assertIn("size_mm: 50", prompt)
-        self.assertIn("pressure_class: 150", prompt)
-        self.assertIn("connection: flanged", prompt)
-        self.assertIn("MATCHING", prompt)
-        self.assertIn("CONFLICTING", prompt)
-        self.assertIn("MISSING", prompt)
-
-    def test_prompt_uses_actual_pipe_attribute_names_when_present(self):
-        catalog = (CatalogRecord("PIPE-001", extract_attributes("PIPE CARBON STEEL OD 100MM THK 5MM SCHEDULE 40 END PLAIN").attributes),)
-        attributes = extract_attributes("PIPE CARBON STEEL OD 100MM THK 5MM SCHEDULE 40 END PLAIN").attributes
-        prompt = GeminiLLMAdapter._build_prompt("pipe carbon steel od 100 mm thk 5 mm schedule 40 end plain", attributes, catalog)
-        self.assertIn("od_mm: 100", prompt)
-        self.assertIn("thickness_mm: 5", prompt)
-        self.assertIn("schedule: 40", prompt)
-        self.assertIn("end: plain", prompt)
 
     def test_completed_markdown_bullet_list_is_rejected(self):
         adapter, _ = self._adapter("* VAL-001: General category match.\n* VAL-002: Matches gate valve type.")

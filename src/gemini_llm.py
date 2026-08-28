@@ -49,6 +49,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
         self._client_factory = client_factory
         self._client: Any | None = None
         self._failure_detail: str | None = None
+        self._response_diagnostic: str | None = None
         self._client_attempted = False
 
     def status(self) -> AdapterStatus:
@@ -58,10 +59,12 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
         if not os.getenv("GEMINI_API_KEY"):
             return AdapterStatus("llm", False, "Gemini API key is not configured.")
         if self._client_factory is not None:
-            return AdapterStatus("llm", True, "Gemini adapter configured; client initialization is lazy.")
+            detail = self._response_diagnostic or "Gemini adapter configured; client initialization is lazy."
+            return AdapterStatus("llm", True, detail)
         if find_spec("google.genai") is None:
             return AdapterStatus("llm", False, "google-genai is not installed.")
-        return AdapterStatus("llm", True, f"Gemini {self.model_name} is configured; client initialization is lazy.")
+        detail = self._response_diagnostic or f"Gemini {self.model_name} is configured; client initialization is lazy."
+        return AdapterStatus("llm", True, detail)
 
     def interpret(
         self,
@@ -72,6 +75,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
     ) -> tuple[CandidateSuggestion, ...]:
         """Ask Gemini for advisory candidate evidence and nothing authoritative."""
         if not normalized_description or not catalog:
+            self._response_diagnostic = "Gemini request skipped: normalized description or catalog is empty."
             return ()
         if self._failure_detail is not None:
             return ()
@@ -84,31 +88,25 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
         try:
             response = self._client.interactions.create(
                 model=self.model_name,
-                input=self._build_prompt(normalized_description, attributes, catalog),
+                input=self._build_prompt(raw_description, normalized_description, attributes, catalog),
                 response_format={
                     "type": "text",
                     "mime_type": "application/json",
                     "schema": {
-                        "type": "object",
-                        "properties": {
-                            "candidates": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "canonical_material_id": {"type": "string"},
-                                        "compatibility_score": {"type": "number"},
-                                        "matching_attributes": {"type": "array", "items": {"type": "string"}},
-                                        "conflicting_attributes": {"type": "array", "items": {"type": "string"}},
-                                        "missing_attributes": {"type": "array", "items": {"type": "string"}},
-                                        "technical_compatible": {"type": "boolean"},
-                                        "reason": {"type": "string"},
-                                    },
-                                    "required": ["canonical_material_id", "compatibility_score", "reason"],
-                                },
-                            }
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "canonical_material_id": {"type": "string"},
+                                "compatibility_score": {"type": "number"},
+                                "matching_attributes": {"type": "array", "items": {"type": "string"}},
+                                "conflicting_attributes": {"type": "array", "items": {"type": "string"}},
+                                "missing_attributes": {"type": "array", "items": {"type": "string"}},
+                                "technical_compatible": {"type": "boolean"},
+                                "reason": {"type": "string"},
+                            },
+                            "required": ["canonical_material_id", "compatibility_score"],
                         },
-                        "required": ["candidates"],
                     },
                 },
             )
@@ -118,7 +116,9 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                     f"Gemini interaction did not complete successfully: status={response_status!r}"
                 )
                 return ()
-            return self._parse_response(response, catalog)
+            suggestions, diagnostic = self._parse_response(response, catalog)
+            self._response_diagnostic = diagnostic
+            return suggestions
         except Exception as error:
             self._failure_detail = f"Gemini interpretation failed: {error}"
             return ()
@@ -157,49 +157,73 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
         return {"value": repr(attributes)}
 
     @classmethod
-    def _build_prompt(cls, normalized_description: str, attributes: Any, catalog: tuple[Any, ...]) -> str:
-        input_attributes = cls._attributes_dict(attributes)
-        candidate_sections = []
+    def _build_prompt(
+        cls,
+        raw_description: str | None,
+        normalized_description: str,
+        attributes: Any,
+        catalog: tuple[Any, ...],
+    ) -> str:
+        def format_attributes(values: dict[str, Any], indent: str = "") -> str:
+            lines: list[str] = []
+            for name, value in values.items():
+                if isinstance(value, tuple):
+                    rendered = "x".join(str(item) for item in value)
+                else:
+                    rendered = str(value)
+                lines.append(f"{indent}{name}: {rendered}")
+            return "\n".join(lines) or f"{indent}<not available>"
+
+        input_values = cls._attributes_dict(attributes)
+        sections = [
+            "=== INPUT MATERIAL ===",
+            f"Raw description: {raw_description or '<not supplied>'}",
+            f"Normalized description: {normalized_description}",
+            "",
+            "=== INPUT MATERIAL ATTRIBUTES ===",
+            format_attributes(input_values),
+            "",
+        ]
+
         for record in catalog:
-            candidate_attributes = cls._attributes_dict(getattr(record, "attributes", None))
-            attribute_lines = "\n".join(f"        {key}: {value}" for key, value in candidate_attributes.items())
-            candidate_sections.append(
-                "=== CANDIDATE CATALOG RECORD ===\n"
-                f"canonical_material_id: {record.canonical_material_id}\n"
-                f"attributes:\n{attribute_lines or '        none available'}"
+            candidate_values = cls._attributes_dict(getattr(record, "attributes", None))
+            sections.extend(
+                [
+                    "=== CANDIDATE CATALOG RECORD ===",
+                    f"canonical_material_id: {record.canonical_material_id}",
+                    format_attributes(candidate_values),
+                    "",
+                ]
             )
 
-        input_attribute_lines = "\n".join(f"    {key}: {value}" for key, value in input_attributes.items())
-        return (
-            "You are an advisory technical material-matching analyst. Return ONLY valid JSON "
-            "matching the supplied schema. Semantic similarity alone is insufficient for equivalence. "
-            "Compare only the supplied evidence. Do not invent specifications or catalog records.\n\n"
-            "=== INPUT MATERIAL ===\n"
-            f"Raw description: {normalized_description}\n"
-            f"Normalized description: {normalized_description}\n\n"
-            "=== INPUT MATERIAL ATTRIBUTES ===\n"
-            f"{input_attribute_lines or '    none available'}\n\n"
-            + "\n\n".join(candidate_sections)
-            + "\n\n=== ATTRIBUTE SEMANTICS ===\n"
-            "MATCHING: report an attribute as matching only when the input value is known, the candidate value is known, "
-            "and the values are technically compatible.\n"
-            "CONFLICTING: report a conflict only when the input value is known, the candidate value is known, "
-            "and the values are technically incompatible.\n"
-            "MISSING: report missing only when the relevant evidence is genuinely absent. Do not call an input attribute "
-            "missing merely because the candidate attribute appears in a different section.\n"
-            "Set technical_compatible=true only when supplied technical evidence supports equivalence and there are no "
-            "unresolved critical conflicts. Set it=false only when explicit technical evidence rules out equivalence. "
-            "If compatibility cannot be established because evidence is incomplete, omit technical_compatible rather "
-            "than treating missing information as a conflict.\n\n"
-            "For every returned candidate, compatibility_score is REQUIRED. It must be a numeric value from 0.0 through "
-            "1.0 and represents Gemini's advisory technical compatibility assessment based only on the supplied evidence. "
-            "It is not a calibrated probability or confidence. Do not return separate confidence, probability, score, or "
-            "final decision fields. Do not make a final MATCHED/UNCERTAIN/NEW_CANDIDATE decision and do not override "
-            "deterministic authority. Use only supplied canonical material IDs. Return at most 5 candidates."
+        sections.extend(
+            [
+                "TECHNICAL COMPARISON RULES:",
+                "1. Matching means both sides contain the attribute and their values are technically compatible.",
+                "2. Conflicting means both sides contain the attribute and their values contradict.",
+                "3. Missing means one side genuinely lacks the attribute.",
+                "4. Never put an input attribute into missing_attributes merely because it is located in the INPUT section.",
+                "5. Do not invent attributes or specifications.",
+                "6. Compare technical attributes independently.",
+                "7. compatibility_score MUST be generated by Gemini from the supplied technical evidence.",
+                "8. compatibility_score must be numeric and between 0.0 and 1.0.",
+                "9. Do not use positional or rank-based scores.",
+                "10. Do not use hard-coded score mappings or positional fallback values.",
+                "11. Do not fabricate candidates or scores.",
+                "12. Gemini is advisory only.",
+                "13. The deterministic MappingResult remains authoritative.",
+                "14. Return only supplied canonical material IDs and at most 5 candidates.",
+                "15. Return a JSON array of candidate objects. Each candidate MUST contain canonical_material_id and compatibility_score. reason is optional and should be included when available.",
+                "Return ONLY valid JSON matching the supplied response schema. Do not return confidence, probability, score, or a final decision.",
+            ]
         )
+        return "\n".join(sections)
 
     @staticmethod
-    def _parse_response(response: Any, catalog: tuple[Any, ...]) -> tuple[CandidateSuggestion, ...]:
+    def _parse_response(
+        response: Any,
+        catalog: tuple[Any, ...],
+    ) -> tuple[tuple[CandidateSuggestion, ...], str]:
         output_text = getattr(response, "output_text", None)
         if not isinstance(output_text, str) or not output_text.strip():
             raise ValueError("Gemini response has no structured output text")
@@ -212,40 +236,61 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 raise ValueError("Gemini response contains an incomplete Markdown fence")
             cleaned = "\n".join(lines[1:-1]).strip()
         payload = json.loads(cleaned)
-        if not isinstance(payload, dict) or not isinstance(payload.get("candidates"), list):
+        if isinstance(payload, dict):
+            candidates = payload.get("candidates")
+        elif isinstance(payload, list):
+            candidates = payload
+        else:
+            candidates = None
+        if not isinstance(candidates, list):
             raise ValueError("Gemini response does not match the candidate schema")
 
         known_ids = {record.canonical_material_id for record in catalog}
         seen: set[str] = set()
         suggestions: list[CandidateSuggestion] = []
-        for item in payload["candidates"]:
+        rejected: list[str] = []
+        returned_count = len(candidates)
+        for item in candidates:
             if len(suggestions) >= MAX_CANDIDATES:
                 break
             if not isinstance(item, dict):
-                continue
-            if any(key in item for key in _FORBIDDEN_OUTPUT_FIELDS):
+                rejected.append("<non-object candidate>: candidate must be an object")
                 continue
             canonical_id = item.get("canonical_material_id")
             raw_score = item.get("compatibility_score")
-            reason = item.get("reason")
+            reason = item.get("reason", "")
             matching = item.get("matching_attributes", [])
             conflicting = item.get("conflicting_attributes", [])
             missing = item.get("missing_attributes", [])
             compatible = item.get("technical_compatible")
+            if any(key in item for key in _FORBIDDEN_OUTPUT_FIELDS):
+                forbidden = next(key for key in _FORBIDDEN_OUTPUT_FIELDS if key in item)
+                rejected.append(f"{canonical_id or '<unknown>'}: forbidden field {forbidden}")
+                continue
             if not isinstance(canonical_id, str) or not canonical_id.strip():
+                rejected.append("<unknown>: missing canonical_material_id")
                 continue
             if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
+                rejected.append(f"{canonical_id}: missing or invalid compatibility_score")
                 continue
             score = float(raw_score)
             if not isfinite(score) or not 0.0 <= score <= 1.0:
+                rejected.append(f"{canonical_id}: compatibility_score outside [0,1]")
                 continue
-            if not isinstance(reason, str) or not reason.strip():
+            if reason is not None and not isinstance(reason, str):
+                rejected.append(f"{canonical_id}: reason must be a string when supplied")
                 continue
             if not all(isinstance(value, list) and all(isinstance(x, str) for x in value) for value in (matching, conflicting, missing)):
+                rejected.append(f"{canonical_id}: technical evidence fields must be string arrays")
                 continue
             if compatible is not None and not isinstance(compatible, bool):
+                rejected.append(f"{canonical_id}: technical_compatible must be boolean or omitted")
                 continue
-            if canonical_id not in known_ids or canonical_id in seen:
+            if canonical_id not in known_ids:
+                rejected.append(f"{canonical_id}: unknown catalog ID")
+                continue
+            if canonical_id in seen:
+                rejected.append(f"{canonical_id}: duplicate catalog ID")
                 continue
             seen.add(canonical_id)
             compatibility_text = "unknown" if compatible is None else ("yes" if compatible else "no")
@@ -268,4 +313,13 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                     technical_compatible=compatible,
                 )
             )
-        return tuple(suggestions)
+        if rejected:
+            diagnostic = (
+                f"Gemini request completed; {returned_count} candidates received; "
+                f"{len(suggestions)} accepted; {len(rejected)} rejected: " + "; ".join(rejected)
+            )
+        elif suggestions:
+            diagnostic = f"Gemini request completed; {returned_count} candidates received; {len(suggestions)} accepted."
+        else:
+            diagnostic = "Gemini returned zero candidates."
+        return tuple(suggestions), diagnostic

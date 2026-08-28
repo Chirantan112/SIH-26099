@@ -50,9 +50,13 @@ class AppPresentationTests(unittest.TestCase):
         rows = candidate_rows((CandidateEvidence("VAL-001", "SAME", 1.0, "All required attributes match."),))
         self.assertEqual(rows, [{"Canonical material ID": "VAL-001", "Decision": "SAME", "Score": 1.0, "Explanation": "All required attributes match."}])
 
-    def test_advisory_rows_are_ui_safe_and_named_as_rank(self):
-        rows = advisory_rows((CandidateSuggestion("VAL-001", 1.0, "gemini", "Advisory only."),))
-        self.assertEqual(rows, [{"Canonical material ID": "VAL-001", "Source": "gemini", "Advisory Rank": 1.0, "Reason": "Advisory only."}])
+    def test_advisory_rows_are_ui_safe_and_use_explicit_score_label(self):
+        rows = advisory_rows(
+            (CandidateSuggestion("VAL-001", 1.0, "gemini", "Advisory only."),),
+            "Gemini Compatibility Score",
+        )
+        self.assertEqual(rows, [{"Canonical material ID": "VAL-001", "Source": "gemini", "Gemini Compatibility Score": 1.0, "Reason": "Advisory only."}])
+        self.assertNotIn("Advisory Rank", rows[0])
 
     def test_missing_attributes_render_cleanly(self):
         rows = attribute_rows(MaterialAttributes(category="Pipe", material="carbon steel"))
@@ -77,7 +81,9 @@ class AppPresentationTests(unittest.TestCase):
     def test_ai_suggestions_are_displayed_separately_from_deterministic_evidence(self):
         llm = FakeAdapter("llm", (CandidateSuggestion("VAL-001", 1.0, "gemini", "Advisory."),))
         result = analyze_material("CS GATE VLV 50MM FLG CL150", CATALOG, True, FakeAdapter("local_nlp"), llm)
-        self.assertEqual(advisory_rows(result.ai_candidate_suggestions)[0]["Source"], "gemini")
+        rows = advisory_rows(result.ai_candidate_suggestions, "Gemini Compatibility Score")
+        self.assertEqual(rows[0]["Source"], "gemini")
+        self.assertEqual(rows[0]["Gemini Compatibility Score"], 1.0)
         self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
 
     def test_ai_suggestions_cannot_replace_deterministic_canonical_id(self):

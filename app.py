@@ -11,8 +11,10 @@ from typing import Any, Callable
 from src.ai_retrieval import CandidateSuggestion, UnavailableRetrievalAdapter
 from src.attribute_extraction import MaterialAttributes
 from src.demo_pipeline import load_demo_catalog
+from src.governance import AuditTrail
 from src.hybrid_pipeline import HybridResult, run_hybrid_pipeline
 from src.llm_interpretation import UnavailableLLMAdapter
+from src.source_adapters import CSVMaterialCatalogSource, SAPMaterialCatalogSource
 
 try:
     import streamlit as st
@@ -75,8 +77,8 @@ def candidate_rows(candidates: tuple[Any, ...]) -> list[dict[str, str | float]]:
     return [{"Canonical material ID": c.canonical_material_id, "Decision": c.decision, "Score": c.score, "Explanation": c.explanation} for c in candidates]
 
 
-def advisory_rows(suggestions: tuple[CandidateSuggestion, ...]) -> list[dict[str, str | float]]:
-    return [{"Canonical material ID": s.canonical_material_id, "Source": s.source, "Advisory Rank": s.score, "Reason": s.explanation} for s in suggestions]
+def advisory_rows(suggestions: tuple[CandidateSuggestion, ...], score_label: str) -> list[dict[str, str | float]]:
+    return [{"Canonical material ID": s.canonical_material_id, "Source": s.source, score_label: s.score, "Reason": s.explanation} for s in suggestions]
 
 
 def _friendly_status(status: Any) -> str:
@@ -98,28 +100,14 @@ def _analysis_adapters(ai_enabled: bool) -> tuple[Any, Any]:
     return retrieval, llm
 
 
-def analyze_material(
-    description: str | None,
-    catalog: tuple[Any, ...],
-    ai_enabled: bool,
-    retrieval_adapter: Any | None = None,
-    llm_adapter: Any | None = None,
-    progress_callback: Callable[[str], None] | None = None,
-) -> HybridResult:
+def analyze_material(description: str | None, catalog: tuple[Any, ...], ai_enabled: bool, retrieval_adapter: Any | None = None, llm_adapter: Any | None = None, progress_callback: Callable[[str], None] | None = None) -> HybridResult:
     """Run the existing hybrid orchestration; the deterministic result stays authoritative."""
     if not ai_enabled:
         retrieval_adapter = UnavailableRetrievalAdapter("AI advisory is disabled.")
         llm_adapter = UnavailableLLMAdapter("AI advisory is disabled.")
     elif retrieval_adapter is None or llm_adapter is None:
         retrieval_adapter, llm_adapter = _analysis_adapters(True)
-    return run_hybrid_pipeline(
-        description,
-        catalog,
-        legacy_material_code="DASHBOARD-INPUT",
-        retrieval_adapter=retrieval_adapter,
-        llm_adapter=llm_adapter,
-        progress_callback=progress_callback,
-    )
+    return run_hybrid_pipeline(description, catalog, legacy_material_code="DASHBOARD-INPUT", retrieval_adapter=retrieval_adapter, llm_adapter=llm_adapter, progress_callback=progress_callback)
 
 
 def _inject_styles() -> None:
@@ -149,6 +137,7 @@ def _inject_styles() -> None:
     .result-section{margin-top:1rem}.result-head{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:.65rem}.result-head h2{margin:0;font-size:1.35rem;letter-spacing:-.03em}.result-head p{margin:0;color:var(--muted);font-size:.67rem;text-align:right}.evidence-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}.evidence{padding:.8rem;border:1px solid var(--line);border-radius:14px;background:rgba(8,18,31,.78)}.evidence-label{color:#91a8bd;font-size:.59rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase}.evidence-value{margin-top:.4rem;color:#e3ebf2;font-size:.68rem;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
     .consensus{margin-top:.8rem;padding:1rem;border:1px solid rgba(66,200,238,.26);border-radius:18px;background:linear-gradient(145deg,rgba(12,36,55,.28),rgba(7,15,26,.96))}.consensus-head{display:flex;align-items:center;justify-content:space-between;gap:.7rem}.consensus-title{color:#dce8f2;font-size:.95rem;font-weight:950;letter-spacing:.06em;text-transform:uppercase}.consensus-pill{padding:.38rem .68rem;border-radius:999px;border:1px solid rgba(85,227,154,.4);color:#c8f5d9;font-size:.62rem;font-weight:950;letter-spacing:.08em}.consensus-pill.uncertain{color:#f5cf82;border-color:rgba(241,189,99,.45)}.consensus-pill.new{color:#90dcf2;border-color:rgba(66,200,238,.45)}.consensus-pill.unavailable{color:#9aaaba;border-color:#34495c}.consensus-candidate{margin-top:.5rem;color:#eef6fb;font-size:.78rem;font-weight:850}.consensus-reason{margin-top:.25rem;color:var(--muted);font-size:.67rem;line-height:1.45}.consensus-sources{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-top:.7rem}.consensus-source{padding:.65rem;border:1px solid rgba(145,168,190,.12);border-radius:12px;background:rgba(8,16,28,.7)}.consensus-source-label{color:var(--purple);font-size:.59rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.consensus-source-value{margin-top:.3rem;color:#d7e2eb;font-size:.63rem;line-height:1.45}.consensus-authority{margin-top:.65rem;padding:.6rem .7rem;border-radius:11px;background:rgba(85,227,154,.05);border:1px solid rgba(85,227,154,.16);color:#b8cbd8;font-size:.63rem}.consensus-authority strong{color:var(--green)}
     .advisory{margin-top:.8rem;padding:1rem;border:1px solid rgba(185,147,255,.22);border-radius:18px;background:linear-gradient(145deg,rgba(42,27,65,.16),rgba(7,15,26,.94))}.advisory-head{font-size:.95rem;font-weight:950}.advisory-head span{color:var(--purple)}.advisory-note{margin-top:.25rem;color:var(--muted);font-size:.66rem}.advisory-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-top:.7rem}.advisory-card{padding:.75rem;border:1px solid rgba(185,147,255,.2);border-radius:14px;background:rgba(10,17,29,.82)}.advisory-label{color:var(--purple);font-size:.6rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+    .review-card{margin-top:.8rem;padding:1rem;border:1px solid rgba(66,200,238,.22);border-radius:18px;background:linear-gradient(145deg,rgba(11,32,49,.72),rgba(7,15,26,.96))}.review-kicker{color:var(--cyan);font-size:.6rem;font-weight:950;letter-spacing:.13em;text-transform:uppercase}.review-title{margin-top:.35rem;color:#eef6fb;font-size:.95rem;font-weight:950}.review-note{margin-top:.3rem;color:var(--muted);font-size:.66rem;line-height:1.45}.audit-card{margin-top:.8rem;padding:1rem;border:1px solid rgba(145,168,190,.15);border-radius:18px;background:rgba(7,16,28,.78)}.audit-title{font-size:.82rem;font-weight:950;color:#dce8f2}.audit-note{margin-top:.25rem;color:var(--muted);font-size:.63rem}
     .footer{margin-top:1.4rem;padding-top:.8rem;border-top:1px solid var(--line);color:#62798f;font-size:.58rem;letter-spacing:.04em}
     div[data-testid="stButton"] button{border-radius:10px;font-weight:800;border:1px solid var(--line);min-height:2.35rem;white-space:normal;font-size:.72rem;padding:.4rem .35rem;line-height:1.15}div[data-testid="stButton"] button[kind="primary"]{background:linear-gradient(90deg,#20a7db,#2bc2ec);border:0;color:#04111b;box-shadow:0 8px 22px rgba(40,190,235,.16)}
     textarea{border-radius:12px!important}.stAlert{border-radius:12px}.stExpander{border-color:var(--line);border-radius:13px}
@@ -171,6 +160,8 @@ def _render_sidebar() -> bool:
         st.markdown('<div class="side-kicker">Decision Authority</div><div class="side-row"><span class="dot-green">🛡</span> Deterministic Engine</div>', unsafe_allow_html=True)
         st.caption("AUTHORITATIVE · final decision source")
         st.markdown('<div class="side-kicker">AI Services</div><div class="side-row"><span class="dot-purple">🧠</span> Local NLP <span class="side-right">ADVISORY</span></div><div class="side-row"><span class="dot-purple">✦</span> Gemini 2.5 Flash <span class="side-right">LLM · ADVISORY</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-kicker">Data Sources</div><div class="side-row"><span class="dot-green">●</span> Synthetic Material Master <span class="side-right">DEMO</span></div><div class="side-row"><span class="dot-cyan">○</span> SAP / ERP <span class="side-right">READY</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-note">The demo catalog is synthetic. SAP/ERP is integration-ready but no live CPSE connection is claimed.</div>', unsafe_allow_html=True)
         st.markdown('<div class="side-note">AI advisory is optional. Disabled mode does not invoke Local NLP or Gemini.</div>', unsafe_allow_html=True)
         st.markdown('<div class="side-kicker">Demo</div><div class="side-note">Use the quick scenarios in the workspace to demonstrate matched, uncertain, and new-candidate outcomes.</div>', unsafe_allow_html=True)
         return ai_enabled
@@ -178,7 +169,7 @@ def _render_sidebar() -> bool:
 
 def _render_header(ai_enabled: bool) -> None:
     mode = "HYBRID AI" if ai_enabled else "DETERMINISTIC ONLY"
-    st.markdown(f'<div class="hero"><div class="eyebrow">CPSE MATERIAL HARMONIZATION</div><div class="hero-title">CPSE Material Harmonization</div><div class="hero-sub">AI-assisted standardization of legacy CPSE material descriptions into a common canonical material vocabulary.</div><div class="pills"><span class="pill">SIH 2026 · PS 26099</span><span class="pill online">● SYSTEM ONLINE</span><span class="pill">MODE · {mode}</span></div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hero"><div class="eyebrow">CPSE MATERIAL HARMONIZATION</div><div class="hero-title">CPSE Material Harmonization</div><div class="hero-sub">AI-assisted standardization of legacy CPSE material descriptions into a common canonical material vocabulary.</div><div class="pills"><span class="pill">SIH 2026 · PS 26099</span><span class="pill online">● SYSTEM ONLINE</span><span class="pill">MODE · {mode}</span><span class="pill">CATALOG · SYNTHETIC DEMO DATA</span></div></div>', unsafe_allow_html=True)
     st.markdown('<div class="decision-banner"><strong>🛡 Decision authority:</strong> deterministic matching is always the final decision source. Local NLP and Gemini provide separate advisory intelligence only.</div>', unsafe_allow_html=True)
 
 
@@ -203,6 +194,8 @@ def _render_input(ai_enabled: bool) -> str:
                 st.session_state["analysis_result"] = None
                 st.session_state["pipeline_completed"] = ()
                 st.session_state["pipeline_ai_status"] = None
+                st.session_state["review_action"] = None
+                st.session_state["review_note"] = ""
                 st.rerun()
     description = st.text_area("Material Description", key="material_description", height=96, placeholder="Gate Valve Carbon Steel 150 50mm Flanged", help="Example: CS GATE VLV 50MM FLG CL150", label_visibility="collapsed")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -268,6 +261,8 @@ def _render_analysis(result: HybridResult) -> None:
             st.caption("No candidate evidence is available.")
     _render_ai_consensus(result)
     _render_advisory(result)
+    _render_review(result)
+    _render_audit_trail()
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -280,27 +275,69 @@ def _render_ai_consensus(result: HybridResult) -> None:
     gemini = ", ".join(consensus.gemini_candidates) if consensus.gemini_candidates else "No candidate returned"
     authority = result.mapping_result
     authority_id = authority.canonical_material_id or "Not assigned"
-    st.markdown(
-        f'<div class="consensus"><div class="consensus-head"><div class="consensus-title">AI Consensus</div><span class="consensus-pill {css_class}">{icon} {escape(consensus.conclusion)}</span></div>'
-        f'<div class="consensus-candidate">{candidate}</div><div class="consensus-reason">{escape(consensus.reason)}</div>'
-        f'<div class="consensus-sources"><div class="consensus-source"><div class="consensus-source-label">Local NLP</div><div class="consensus-source-value">Candidates: {escape(local)}<br>Technical evidence is shown below in advisory detail.</div></div>'
-        f'<div class="consensus-source"><div class="consensus-source-label">Gemini 2.5 Flash</div><div class="consensus-source-value">Candidates: {escape(gemini)}<br>Structured technical reasoning is shown below in advisory detail.</div></div></div>'
-        f'<div class="consensus-authority"><strong>AUTHORITATIVE DECISION:</strong> {escape(authority.decision)} · {escape(str(authority_id))}. AI consensus never overrides this deterministic result.</div></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="consensus"><div class="consensus-head"><div class="consensus-title">AI Consensus</div><span class="consensus-pill {css_class}">{icon} {escape(consensus.conclusion)}</span></div><div class="consensus-candidate">{candidate}</div><div class="consensus-reason">{escape(consensus.reason)}</div><div class="consensus-sources"><div class="consensus-source"><div class="consensus-source-label">Local NLP</div><div class="consensus-source-value">Candidates: {escape(local)}<br>Technical evidence is shown below in advisory detail.</div></div><div class="consensus-source"><div class="consensus-source-label">Gemini 2.5 Flash</div><div class="consensus-source-value">Candidates: {escape(gemini)}<br>Structured technical reasoning is shown below in advisory detail.</div></div></div><div class="consensus-authority"><strong>AUTHORITATIVE DECISION:</strong> {escape(authority.decision)} · {escape(str(authority_id))}. AI consensus never overrides this deterministic result.</div></div>', unsafe_allow_html=True)
 
 
 def _render_advisory(result: HybridResult) -> None:
     local = tuple(x for x in result.ai_candidate_suggestions if x.source == "local_embedding")
     gemini = tuple(x for x in result.ai_candidate_suggestions if x.source == "gemini")
-    st.markdown('<div class="advisory"><div class="advisory-head"><span>AI Advisory</span> · advisory only</div><div class="advisory-note">AI suggestions are never used as the authoritative decision. Numeric values are similarity/rank evidence, not confidence or probability.</div><div class="advisory-grid"><div class="advisory-card"><div class="advisory-label">🧠 Local NLP · Embedding Retrieval</div></div><div class="advisory-card"><div class="advisory-label">✦ Gemini 2.5 Flash · LLM</div></div></div></div>', unsafe_allow_html=True)
+    gemini_status = next((status for status in result.ai_statuses if status.component == "llm"), None)
+    local_status = next((status for status in result.ai_statuses if status.component == "local_nlp"), None)
+    st.markdown('<div class="advisory"><div class="advisory-head"><span>AI Advisory</span> · advisory only</div><div class="advisory-note">Gemini values are compatibility scores supplied by Gemini. Local NLP values are cosine similarity. Neither is confidence or probability; neither overrides deterministic authority.</div><div class="advisory-grid"><div class="advisory-card"><div class="advisory-label">🧠 Local NLP · Embedding Retrieval</div></div><div class="advisory-card"><div class="advisory-label">✦ Gemini 2.5 Flash · LLM</div></div></div></div>', unsafe_allow_html=True)
     cols = st.columns(2)
-    for col, rows in zip(cols, (local, gemini)):
+    for col, rows, status, score_label in zip(cols, (local, gemini), (local_status, gemini_status), ("Cosine Similarity", "Gemini Compatibility Score")):
         with col:
             if rows:
-                st.dataframe(advisory_rows(rows), hide_index=True, use_container_width=True)
+                st.dataframe(advisory_rows(rows, score_label), hide_index=True, use_container_width=True)
+            elif status is not None and not status.available:
+                st.caption(f"{_friendly_status(status)} — {status.detail}")
+            elif status is not None and status.detail:
+                st.caption(f"No valid candidates returned — {status.detail}")
             else:
-                st.caption("No advisory suggestions available from this component.")
+                st.caption("No valid candidates returned.")
+
+
+def _render_review(result: HybridResult) -> None:
+    suggestions = result.ai_candidate_suggestions
+    candidate_ids = [item.canonical_material_id for item in suggestions]
+    deterministic_id = result.mapping_result.canonical_material_id
+    default_selection = deterministic_id if deterministic_id in candidate_ids else (candidate_ids[0] if candidate_ids else "")
+    st.markdown('<div class="review-card"><div class="review-kicker">HUMAN VALIDATION</div><div class="review-title">Review the proposed material mapping</div><div class="review-note">Human actions are recorded for governance. They do not modify the authoritative deterministic result.</div>', unsafe_allow_html=True)
+    if not suggestions:
+        st.caption("No AI candidates are available for human review. The deterministic result remains authoritative.")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+    selected = st.selectbox("Candidate to review", candidate_ids, index=candidate_ids.index(default_selection) if default_selection in candidate_ids else 0, key="review_candidate")
+    note = st.text_area("Reviewer note", key="review_note", height=70, placeholder="Explain why the recommendation was approved, rejected, or needs review.")
+    cols = st.columns(3)
+    actions = (("✓ APPROVE", "APPROVE", "primary"), ("✕ REJECT", "REJECT", "secondary"), ("⚠ REVIEW", "REVIEW", "secondary"))
+    for col, (label, action, kind) in zip(cols, actions):
+        with col:
+            if st.button(label, type=kind, use_container_width=True, key=f"review_{action.lower()}"):
+                event = st.session_state["audit_trail"].record_review(
+                    legacy_material_code=result.legacy_material_code,
+                    input_description=st.session_state.get("material_description", ""),
+                    deterministic_decision=result.mapping_result.decision,
+                    deterministic_material_id=result.mapping_result.canonical_material_id,
+                    candidate_material_id=selected,
+                    action=action,
+                    note=note,
+                )
+                st.session_state["review_action"] = event
+                st.rerun()
+    previous = st.session_state.get("review_action")
+    if previous is not None:
+        st.success(f"{previous.reviewer_action}: {previous.selected_material_id or 'no candidate selected'} recorded. Deterministic result remains {result.mapping_result.decision} · {result.mapping_result.canonical_material_id or 'Not assigned'}.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def _render_audit_trail() -> None:
+    trail = st.session_state.get("audit_trail")
+    if not isinstance(trail, AuditTrail) or not trail.events:
+        return
+    st.markdown('<div class="audit-card"><div class="audit-title">Audit Trail</div><div class="audit-note">Session-local review history; production storage can be replaced by a governed database.</div></div>', unsafe_allow_html=True)
+    rows = [event.to_dict() for event in reversed(trail.events)]
+    st.dataframe(rows, hide_index=True, use_container_width=True)
 
 
 def _render_status(result: HybridResult | None, ai_enabled: bool) -> None:
@@ -326,6 +363,9 @@ def main() -> None:
     st.session_state.setdefault("material_description", "")
     st.session_state.setdefault("pipeline_completed", ())
     st.session_state.setdefault("pipeline_ai_status", None)
+    st.session_state.setdefault("audit_trail", AuditTrail())
+    st.session_state.setdefault("review_action", None)
+    st.session_state.setdefault("review_note", "")
 
     ai_enabled = _render_sidebar()
     previous_result = st.session_state.get("analysis_result")
@@ -350,6 +390,7 @@ def main() -> None:
                 st.session_state["analysis_result"] = None
                 st.session_state["pipeline_completed"] = ()
                 st.session_state["pipeline_ai_status"] = None
+                st.session_state["review_action"] = None
                 pipeline_placeholder = center.empty()
                 _render_pipeline((), "input", pipeline_placeholder, ai_enabled, None)
                 try:
@@ -364,12 +405,9 @@ def main() -> None:
                         remaining = next((key for _, _, _, key in PIPELINE_STAGES if key not in completed and (key != "ai_advisory" or ai_enabled)), None)
                         _render_pipeline(tuple(completed), remaining, pipeline_placeholder, ai_enabled, None)
 
-                    result = analyze_material(
-                        description,
-                        load_demo_catalog(CATALOG_PATH),
-                        ai_enabled,
-                        progress_callback=on_progress,
-                    )
+                    catalog_source = CSVMaterialCatalogSource(CATALOG_PATH)
+                    catalog = catalog_source.load()
+                    result = analyze_material(description, catalog, ai_enabled, progress_callback=on_progress)
                     st.session_state["analysis_result"] = result
                     st.session_state["analysis_mode"] = ai_enabled
                     ai_state = None
@@ -383,6 +421,13 @@ def main() -> None:
                         ai_state = "unavailable"
                     st.session_state["pipeline_ai_status"] = ai_state
                     st.session_state["pipeline_completed"] = tuple(completed_stages)
+                    st.session_state["audit_trail"].record_analysis(
+                        legacy_material_code=result.legacy_material_code,
+                        input_description=description,
+                        deterministic_decision=result.mapping_result.decision,
+                        deterministic_material_id=result.mapping_result.canonical_material_id,
+                        ai_candidates=tuple(item.canonical_material_id for item in result.ai_candidate_suggestions),
+                    )
                     _render_pipeline(tuple(completed_stages), None, pipeline_placeholder, ai_enabled, ai_state)
                     st.rerun()
                 except (OSError, TypeError, ValueError):
