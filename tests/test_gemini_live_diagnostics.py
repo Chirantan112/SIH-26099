@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.attribute_extraction import extract_attributes
 from src.catalog_mapping import CatalogRecord
@@ -22,6 +24,14 @@ class FakeResponse:
 
 
 class GeminiLiveDiagnosticsTests(unittest.TestCase):
+    def setUp(self):
+        # These tests exercise the adapter's response/diagnostic behavior with
+        # injected fake clients; they must not depend on the developer's real
+        # environment having GEMINI_API_KEY configured.
+        self._api_key_patch = patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"})
+        self._api_key_patch.start()
+        self.addCleanup(self._api_key_patch.stop)
+
     def _adapter(self, output_text: str):
         response = FakeResponse(output_text)
         return GeminiLLMAdapter(client_factory=lambda _key: _FakeClient(response))
