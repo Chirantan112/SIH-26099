@@ -264,8 +264,15 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         adapter, _ = self._adapter(
             '{"candidates":[{"canonical_material_id":"VAL-001","reason":"No score supplied"}]}'
         )
-        self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
-        self.assertFalse(adapter.status().available)
+        result = adapter.interpret("desc", "desc", object(), CATALOG)
+        self.assertEqual(result, ())
+        self.assertTrue(adapter.status().available)
+        self.assertIn("compatibility", adapter.status().detail.lower())
+        self.assertNotIn("1.0", adapter.status().detail)
+        self.assertNotIn("0.8", adapter.status().detail)
+        self.assertNotIn("0.6", adapter.status().detail)
+        self.assertNotIn("0.4", adapter.status().detail)
+        self.assertNotIn("0.2", adapter.status().detail)
 
     def test_invalid_gemini_scores_are_rejected(self):
         for raw_score in ("NaN", "1.5", "-0.1", '"high"', "true"):
