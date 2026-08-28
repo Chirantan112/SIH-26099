@@ -1,9 +1,9 @@
 """Optional Gemini LLM interpretation adapter for LEGO #10.
 
 Gemini is advisory only. The deterministic LEGO #2-#5 mapping remains the sole
-source of truth for MappingResult. The adapter uses the Google GenAI
-Interactions API and structured JSON output, but never asks the model for a
-final mapping decision or a confidence/probability value.
+source of truth for MappingResult. The adapter uses structured JSON output and
+returns technical evidence, but never asks the model for a final mapping
+decision or a confidence/probability value.
 """
 
 from __future__ import annotations
@@ -19,19 +19,25 @@ from src.llm_interpretation import LLMInterpretationAdapter
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 MAX_CANDIDATES = 5
-_RANK_SCORES = (1.0, 0.8, 0.6, 0.4, 0.2)
+
+_FORBIDDEN_OUTPUT_FIELDS = {
+    "confidence",
+    "probability",
+    "score",
+    "decision",
+    "matched",
+    "uncertain",
+    "new_candidate",
+}
 
 
 class GeminiLLMAdapter(LLMInterpretationAdapter):
-    """Lazy, fault-tolerant Gemini candidate-suggestion adapter.
+    """Lazy, fault-tolerant Gemini technical candidate-evidence adapter.
 
-    The numeric score is derived only from the model-returned rank. It is a
-    bounded compatibility field for ``CandidateSuggestion`` and is explicitly
-    NON-PROBABILISTIC and NON-AUTHORITATIVE; it is not Gemini confidence.
-
-    ``client_factory`` is an optional dependency-injection seam for tests. The
-    production factory lazily imports ``google-genai`` and constructs a client
-    only when ``interpret`` is called.
+    ``compatibility_score`` is supplied by Gemini and preserved as a bounded
+    advisory assessment. It is not a calibrated probability or confidence and
+    is never authoritative. Technical evidence fields are optional; omitted
+    evidence is represented as empty/unknown rather than inferred.
     """
 
     def __init__(
@@ -64,7 +70,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
         attributes: Any,
         catalog: tuple[Any, ...],
     ) -> tuple[CandidateSuggestion, ...]:
-        """Ask Gemini for advisory catalog candidates and nothing authoritative."""
+        """Ask Gemini for advisory candidate evidence and nothing authoritative."""
         if not normalized_description or not catalog:
             return ()
         if self._failure_detail is not None:
@@ -80,26 +86,31 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 model=self.model_name,
                 input=self._build_prompt(normalized_description, attributes, catalog),
                 response_format={
-                        "type": "text",
-                        "mime_type": "application/json",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "candidates": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "canonical_material_id": {"type": "string"},
-                                            "reason": {"type": "string"},
-                                        },
-                                        "required": ["canonical_material_id", "reason"],
+                    "type": "text",
+                    "mime_type": "application/json",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "candidates": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "canonical_material_id": {"type": "string"},
+                                        "compatibility_score": {"type": "number"},
+                                        "matching_attributes": {"type": "array", "items": {"type": "string"}},
+                                        "conflicting_attributes": {"type": "array", "items": {"type": "string"}},
+                                        "missing_attributes": {"type": "array", "items": {"type": "string"}},
+                                        "technical_compatible": {"type": "boolean"},
+                                        "reason": {"type": "string"},
                                     },
-                                }
-                            },
-                            "required": ["candidates"],
+                                    "required": ["canonical_material_id", "compatibility_score", "reason"],
+                                },
+                            }
                         },
+                        "required": ["candidates"],
                     },
+                },
             )
             response_status = getattr(response, "status", None)
             if response_status != "completed":
@@ -132,26 +143,59 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
             return False
 
     @staticmethod
-    def _build_prompt(normalized_description: str, attributes: Any, catalog: tuple[Any, ...]) -> str:
-        catalog_ids = [record.canonical_material_id for record in catalog]
+    def _attributes_dict(attributes: Any) -> dict[str, Any]:
+        try:
+            from dataclasses import fields, is_dataclass
+            if is_dataclass(attributes):
+                return {
+                    field.name: getattr(attributes, field.name)
+                    for field in fields(attributes)
+                    if getattr(attributes, field.name) is not None
+                }
+        except Exception:
+            pass
+        return {"value": repr(attributes)}
+
+    @classmethod
+    def _build_prompt(cls, normalized_description: str, attributes: Any, catalog: tuple[Any, ...]) -> str:
+        input_attributes = cls._attributes_dict(attributes)
+        candidate_sections = []
+        for record in catalog:
+            candidate_attributes = cls._attributes_dict(getattr(record, "attributes", None))
+            attribute_lines = "\n".join(f"        {key}: {value}" for key, value in candidate_attributes.items())
+            candidate_sections.append(
+                "=== CANDIDATE CATALOG RECORD ===\n"
+                f"canonical_material_id: {record.canonical_material_id}\n"
+                f"attributes:\n{attribute_lines or '        none available'}"
+            )
+
+        input_attribute_lines = "\n".join(f"    {key}: {value}" for key, value in input_attributes.items())
         return (
-            "You are an advisory material-description interpreter. "
-            "Return ONLY valid JSON matching this exact structure. "
-            "The top-level JSON value MUST be an object, not an array. "
-            "The object MUST contain a key named candidates. "
-            "Each candidate MUST contain canonical_material_id and reason. "
-            "Use canonical_material_id, NEVER id. "
-            'Example: {"candidates":[{"canonical_material_id":"VAL-001","reason":"short reason"}]} '
-            "Do not return Markdown, code fences, prose, or ID: reason lines. "
-            "Return candidate canonical material IDs only; do not make a final "
-            "mapping decision, do not return MATCHED/UNCERTAIN/NEW_CANDIDATE, "
-            "and do not provide confidence or probability. Use only IDs from "
-            "the supplied catalog. Return at most 5 candidates. For each candidate "
-            "give a short reason based on the supplied description and explicit "
-            "technical attributes.\n\n"
-            f"Normalized description: {normalized_description}\n"
-            f"Explicit attributes: {attributes!r}\n"
-            f"Allowed catalog IDs: {catalog_ids}\n"
+            "You are an advisory technical material-matching analyst. Return ONLY valid JSON "
+            "matching the supplied schema. Semantic similarity alone is insufficient for equivalence. "
+            "Compare only the supplied evidence. Do not invent specifications or catalog records.\n\n"
+            "=== INPUT MATERIAL ===\n"
+            f"Raw description: {normalized_description}\n"
+            f"Normalized description: {normalized_description}\n\n"
+            "=== INPUT MATERIAL ATTRIBUTES ===\n"
+            f"{input_attribute_lines or '    none available'}\n\n"
+            + "\n\n".join(candidate_sections)
+            + "\n\n=== ATTRIBUTE SEMANTICS ===\n"
+            "MATCHING: report an attribute as matching only when the input value is known, the candidate value is known, "
+            "and the values are technically compatible.\n"
+            "CONFLICTING: report a conflict only when the input value is known, the candidate value is known, "
+            "and the values are technically incompatible.\n"
+            "MISSING: report missing only when the relevant evidence is genuinely absent. Do not call an input attribute "
+            "missing merely because the candidate attribute appears in a different section.\n"
+            "Set technical_compatible=true only when supplied technical evidence supports equivalence and there are no "
+            "unresolved critical conflicts. Set it=false only when explicit technical evidence rules out equivalence. "
+            "If compatibility cannot be established because evidence is incomplete, omit technical_compatible rather "
+            "than treating missing information as a conflict.\n\n"
+            "For every returned candidate, compatibility_score is REQUIRED. It must be a numeric value from 0.0 through "
+            "1.0 and represents Gemini's advisory technical compatibility assessment based only on the supplied evidence. "
+            "It is not a calibrated probability or confidence. Do not return separate confidence, probability, score, or "
+            "final decision fields. Do not make a final MATCHED/UNCERTAIN/NEW_CANDIDATE decision and do not override "
+            "deterministic authority. Use only supplied canonical material IDs. Return at most 5 candidates."
         )
 
     @staticmethod
@@ -179,27 +223,49 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 break
             if not isinstance(item, dict):
                 continue
+            if any(key in item for key in _FORBIDDEN_OUTPUT_FIELDS):
+                continue
             canonical_id = item.get("canonical_material_id")
+            raw_score = item.get("compatibility_score")
             reason = item.get("reason")
+            matching = item.get("matching_attributes", [])
+            conflicting = item.get("conflicting_attributes", [])
+            missing = item.get("missing_attributes", [])
+            compatible = item.get("technical_compatible")
             if not isinstance(canonical_id, str) or not canonical_id.strip():
+                continue
+            if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
+                continue
+            score = float(raw_score)
+            if not isfinite(score) or not 0.0 <= score <= 1.0:
                 continue
             if not isinstance(reason, str) or not reason.strip():
                 continue
+            if not all(isinstance(value, list) and all(isinstance(x, str) for x in value) for value in (matching, conflicting, missing)):
+                continue
+            if compatible is not None and not isinstance(compatible, bool):
+                continue
             if canonical_id not in known_ids or canonical_id in seen:
                 continue
-            score = _RANK_SCORES[len(suggestions)]
-            if not isfinite(score) or not 0.0 <= score <= 1.0:
-                continue
             seen.add(canonical_id)
+            compatibility_text = "unknown" if compatible is None else ("yes" if compatible else "no")
+            evidence = (
+                f"{reason.strip()} Matching: {', '.join(matching) or 'none'}. "
+                f"Conflicts: {', '.join(conflicting) or 'none'}. "
+                f"Missing: {', '.join(missing) or 'none'}. "
+                f"Technically compatible: {compatibility_text}. "
+                "[Gemini Compatibility Score is advisory only; NON-PROBABILISTIC and NON-AUTHORITATIVE.]"
+            )
             suggestions.append(
                 CandidateSuggestion(
                     canonical_material_id=canonical_id,
                     score=score,
                     source="gemini",
-                    explanation=(
-                        f"{reason.strip()} "
-                        "[Advisory rank score only; NON-PROBABILISTIC and NON-AUTHORITATIVE.]"
-                    ),
+                    explanation=evidence,
+                    matching_attributes=tuple(matching),
+                    conflicting_attributes=tuple(conflicting),
+                    missing_attributes=tuple(missing),
+                    technical_compatible=compatible,
                 )
             )
         return tuple(suggestions)

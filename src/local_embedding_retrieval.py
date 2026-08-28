@@ -20,14 +20,27 @@ from src.ai_retrieval import AdapterStatus, CandidateSuggestion, RetrievalAdapte
 DEFAULT_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 MAX_CANDIDATES = 5
 
+# Production model instances and catalog embeddings survive Streamlit reruns.
+# Test-injected loaders intentionally bypass these caches so tests remain isolated.
+_PRODUCTION_MODEL_CACHE: dict[str, Any] = {}
+_PRODUCTION_CATALOG_CACHE: dict[tuple[str, tuple[str, ...]], tuple[tuple[float, ...], ...]] = {}
+
+# These are the critical fields already represented by the repository's
+# deterministic linkage model. Missing critical evidence is unresolved, not a
+# technical conflict. In particular, do not invent new schema fields here.
+_REQUIRED_FIELDS = {
+    "Valve": ("valve_type", "material", "size_mm", "pressure_class", "connection"),
+    "Bearing": ("bearing_family", "dimensions", "dimension_unit_present"),
+    "Pipe": ("material", "od_mm", "thickness_mm", "schedule", "end"),
+}
+
 
 class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
     """Lazy, fault-tolerant sentence-embedding candidate retrieval.
 
-    ``model_loader`` is an optional test seam. In production the default loader
-    imports sentence-transformers lazily and constructs ``SentenceTransformer``
-    only inside ``retrieve``. The adapter never decides MATCHED/UNCERTAIN/
-    NEW_CANDIDATE and never mutates deterministic mapping results.
+    The embedding rank is semantic evidence only. Technical evidence is computed
+    from the supplied explicit attributes and attached to each suggestion so the
+    hybrid layer can distinguish similarity from technical compatibility.
     """
 
     def __init__(
@@ -41,6 +54,7 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
         self._load_attempted = False
         self._failure_detail: str | None = None
         self._embedding_failure_detail: str | None = None
+        self._catalog_embedding_cache: dict[tuple[str, ...], tuple[tuple[float, ...], ...]] = {}
 
     def status(self) -> AdapterStatus:
         """Report availability without importing or loading the embedding model."""
@@ -65,7 +79,7 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
         attributes: Any,
         catalog: tuple[Any, ...],
     ) -> tuple[CandidateSuggestion, ...]:
-        """Return up to five cosine-similarity suggestions from the supplied catalog."""
+        """Return up to five semantic suggestions with explicit technical evidence."""
         if not normalized_description or not catalog:
             return ()
         if self._failure_detail is not None:
@@ -75,26 +89,41 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
             return ()
 
         try:
-            query_embedding = self._encode(normalized_description)
+            query_text = self._query_text(normalized_description, attributes)
+            query_embedding = self._encode(query_text)
             catalog_texts = tuple(self._catalog_text(record) for record in catalog)
-            catalog_embeddings = self._encode(catalog_texts)
+            catalog_embeddings = self._catalog_embeddings(catalog_texts)
             query_vector = self._validate_vector(query_embedding)
             vectors = self._validate_matrix(catalog_embeddings, len(catalog))
             scored = []
             for record, vector in zip(catalog, vectors):
                 score = self._cosine_similarity(query_vector, vector)
                 if isfinite(score):
-                    scored.append((score, record.canonical_material_id))
-            scored.sort(key=lambda item: (-item[0], item[1]))
-            return tuple(
-                CandidateSuggestion(
-                    canonical_material_id=canonical_id,
-                    score=score,
-                    source="local_embedding",
-                    explanation=f"Cosine similarity from {self.model_name}; advisory only.",
+                    scored.append((score, record))
+            scored.sort(key=lambda item: (-item[0], item[1].canonical_material_id))
+
+            suggestions: list[CandidateSuggestion] = []
+            for score, record in scored[:MAX_CANDIDATES]:
+                matching, conflicting, missing, compatible = self._technical_evidence(
+                    attributes, getattr(record, "attributes", None)
                 )
-                for score, canonical_id in scored[:MAX_CANDIDATES]
-            )
+                technical_note = self._technical_note(matching, conflicting, missing, compatible)
+                suggestions.append(
+                    CandidateSuggestion(
+                        canonical_material_id=record.canonical_material_id,
+                        score=score,
+                        source="local_embedding",
+                        explanation=(
+                            f"Cosine similarity from {self.model_name}; {technical_note} "
+                            "Local NLP is advisory only."
+                        ),
+                        matching_attributes=matching,
+                        conflicting_attributes=conflicting,
+                        missing_attributes=missing,
+                        technical_compatible=compatible,
+                    )
+                )
+            return tuple(suggestions)
         except Exception as error:
             self._embedding_failure_detail = f"Embedding failed: {error}"
             return ()
@@ -107,14 +136,17 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
         self._load_attempted = True
         try:
             if self._model_loader is not None:
-                loader = self._model_loader
+                self._model = self._model_loader(self.model_name)
             else:
-                # Optional dependency imports are intentionally local and occur
-                # only when retrieve() needs to load the model.
-                from sentence_transformers import SentenceTransformer
+                if self.model_name in _PRODUCTION_MODEL_CACHE:
+                    self._model = _PRODUCTION_MODEL_CACHE[self.model_name]
+                else:
+                    # Optional dependency imports are intentionally local and occur
+                    # only when retrieve() needs to load the model.
+                    from sentence_transformers import SentenceTransformer
 
-                loader = SentenceTransformer
-            self._model = loader(self.model_name)
+                    self._model = SentenceTransformer(self.model_name)
+                    _PRODUCTION_MODEL_CACHE[self.model_name] = self._model
             return True
         except Exception as error:
             self._failure_detail = f"Model loading failed: {error}"
@@ -125,6 +157,34 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
         if isinstance(texts, str):
             return self._model.encode(texts, convert_to_numpy=False)
         return self._model.encode(list(texts), convert_to_numpy=False)
+
+    def _catalog_embeddings(self, catalog_texts: tuple[str, ...]) -> tuple[tuple[float, ...], ...]:
+        if self._model_loader is None:
+            key = (self.model_name, catalog_texts)
+            cached = _PRODUCTION_CATALOG_CACHE.get(key)
+            if cached is not None:
+                return cached
+            encoded = self._validate_matrix(self._encode(catalog_texts), len(catalog_texts))
+            _PRODUCTION_CATALOG_CACHE[key] = encoded
+            return encoded
+        cached = self._catalog_embedding_cache.get(catalog_texts)
+        if cached is not None:
+            return cached
+        encoded = self._validate_matrix(self._encode(catalog_texts), len(catalog_texts))
+        self._catalog_embedding_cache[catalog_texts] = encoded
+        return encoded
+
+    @staticmethod
+    def _query_text(normalized_description: str, attributes: Any) -> str:
+        if is_dataclass(attributes):
+            parts = []
+            for field in fields(attributes):
+                value = getattr(attributes, field.name)
+                if value is not None and str(value).strip():
+                    parts.append(f"{field.name}={value}")
+            if parts:
+                return " ".join(parts)
+        return normalized_description
 
     @staticmethod
     def _validate_vector(value: Any) -> tuple[float, ...]:
@@ -164,6 +224,85 @@ class LocalEmbeddingRetrievalAdapter(RetrievalAdapter):
             raise ValueError("Cannot calculate cosine similarity for a zero vector")
         score = dot / (left_norm * right_norm)
         return max(-1.0, min(1.0, float(score)))
+
+    @staticmethod
+    def _technical_evidence(
+        left: Any,
+        right: Any,
+    ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], bool | None]:
+        """Separate explicit conflicts from incomplete technical evidence.
+
+        False means a known technical fact rules the candidate out. None means
+        compatibility cannot be established because required evidence is missing
+        or unavailable. True requires all category-critical fields to be known and
+        equal. This deliberately mirrors the repository's deterministic linkage
+        semantics without changing that authoritative implementation.
+        """
+        if not is_dataclass(left) or not is_dataclass(right):
+            return (), (), (), None
+
+        matching: list[str] = []
+        conflicting: list[str] = []
+        missing: list[str] = []
+        for field in fields(left):
+            name = field.name
+            a = getattr(left, name, None)
+            b = getattr(right, name, None)
+            if a is not None and b is not None:
+                if a == b:
+                    matching.append(name)
+                else:
+                    conflicting.append(name)
+            elif a is not None or b is not None:
+                missing.append(name)
+
+        category = getattr(left, "category", None)
+        candidate_category = getattr(right, "category", None)
+        if category is None or candidate_category is None:
+            compatible: bool | None = None
+        elif category != candidate_category:
+            compatible = False
+        else:
+            required = _REQUIRED_FIELDS.get(str(category), ())
+            if not required:
+                compatible = None
+            else:
+                critical_conflicts = [name for name in required if name in conflicting]
+                critical_missing = [
+                    name
+                    for name in required
+                    if getattr(left, name, None) is None or getattr(right, name, None) is None
+                ]
+                if critical_conflicts:
+                    compatible = False
+                elif critical_missing:
+                    compatible = None
+                else:
+                    compatible = True
+
+        return tuple(sorted(matching)), tuple(sorted(conflicting)), tuple(sorted(missing)), compatible
+
+    @staticmethod
+    def _technical_note(
+        matching: tuple[str, ...],
+        conflicting: tuple[str, ...],
+        missing: tuple[str, ...],
+        compatible: bool | None,
+    ) -> str:
+        parts = []
+        if matching:
+            parts.append("matching=" + ",".join(matching))
+        if conflicting:
+            parts.append("conflicts=" + ",".join(conflicting))
+        if missing:
+            parts.append("missing=" + ",".join(missing))
+        if compatible is True:
+            parts.append("technically compatible")
+        elif compatible is False:
+            parts.append("explicit technical incompatibility")
+        else:
+            parts.append("technical compatibility unresolved")
+        return "Technical evidence: " + "; ".join(parts)
 
     @staticmethod
     def _catalog_text(record: Any) -> str:

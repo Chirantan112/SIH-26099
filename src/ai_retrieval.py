@@ -1,6 +1,6 @@
 """Dependency-free contracts for optional local semantic candidate retrieval.
 
-LEGO #9A deliberately defines no model implementation.  Adapters conforming to
+LEGO #9A deliberately defines no model implementation. Adapters conforming to
 these contracts are advisory only; deterministic LEGO #4/#5 verification
 remains responsible for every final mapping decision.
 """
@@ -26,12 +26,22 @@ class AdapterStatus:
 
 @dataclass(frozen=True)
 class CandidateSuggestion:
-    """Non-authoritative, primitive-only candidate suggestion from an AI adapter."""
+    """Non-authoritative candidate evidence from an AI adapter.
+
+    ``score`` keeps its adapter-specific meaning: Local NLP exposes cosine
+    similarity and Gemini exposes advisory rank. It is never a probability.
+    The optional technical-evidence fields allow the hybrid layer to build an
+    explicit AI consensus without changing deterministic mapping authority.
+    """
 
     canonical_material_id: str
     score: float
     source: str
     explanation: str
+    matching_attributes: tuple[str, ...] = ()
+    conflicting_attributes: tuple[str, ...] = ()
+    missing_attributes: tuple[str, ...] = ()
+    technical_compatible: bool | None = None
 
 
 class RetrievalAdapter(Protocol):
