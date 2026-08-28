@@ -158,31 +158,44 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
 
     @classmethod
     def _build_prompt(cls, normalized_description: str, attributes: Any, catalog: tuple[Any, ...]) -> str:
-        candidates = []
+        input_attributes = cls._attributes_dict(attributes)
+        candidate_sections = []
         for record in catalog:
-            candidates.append(
-                {
-                    "canonical_material_id": record.canonical_material_id,
-                    "technical_attributes": cls._attributes_dict(getattr(record, "attributes", None)),
-                }
+            candidate_attributes = cls._attributes_dict(getattr(record, "attributes", None))
+            attribute_lines = "\n".join(f"        {key}: {value}" for key, value in candidate_attributes.items())
+            candidate_sections.append(
+                "=== CANDIDATE CATALOG RECORD ===\n"
+                f"canonical_material_id: {record.canonical_material_id}\n"
+                f"attributes:\n{attribute_lines or '        none available'}"
             )
+
+        input_attribute_lines = "\n".join(f"    {key}: {value}" for key, value in input_attributes.items())
         return (
             "You are an advisory technical material-matching analyst. Return ONLY valid JSON "
             "matching the supplied schema. Semantic similarity alone is insufficient for equivalence. "
-            "Technical attributes matter. Compare only the normalized description, explicit input attributes, "
-            "and supplied catalog candidates. Do not invent missing specifications. Identify matching, conflicting, "
-            "and missing attributes. Set technical_compatible=true only when the supplied technical evidence "
-            "supports equivalence and there are no unresolved critical conflicts. Set technical_compatible=false "
-            "only when explicit technical evidence rules out equivalence. If compatibility cannot be established "
-            "because evidence is incomplete, omit technical_compatible rather than treating missing information as "
-            "a conflict. For every candidate, return a compatibility_score from 0.0 through 1.0 that is your "
-            "technical compatibility assessment based only on the supplied evidence. This is an advisory assessment, "
-            "not a calibrated probability or confidence value. Do not return any separate confidence, probability, "
-            "score, or final decision field. Do not make a final MATCHED/UNCERTAIN/NEW_CANDIDATE decision and do not "
-            "override deterministic authority. Use only supplied canonical material IDs. Return at most 5 candidates.\n\n"
-            f"Normalized description: {normalized_description}\n"
-            f"Explicit input attributes: {cls._attributes_dict(attributes)}\n"
-            f"Allowed catalog candidates: {candidates}\n"
+            "Compare only the supplied evidence. Do not invent specifications or catalog records.\n\n"
+            "=== INPUT MATERIAL ===\n"
+            f"Raw description: {normalized_description}\n"
+            f"Normalized description: {normalized_description}\n\n"
+            "=== INPUT MATERIAL ATTRIBUTES ===\n"
+            f"{input_attribute_lines or '    none available'}\n\n"
+            + "\n\n".join(candidate_sections)
+            + "\n\n=== ATTRIBUTE SEMANTICS ===\n"
+            "MATCHING: report an attribute as matching only when the input value is known, the candidate value is known, "
+            "and the values are technically compatible.\n"
+            "CONFLICTING: report a conflict only when the input value is known, the candidate value is known, "
+            "and the values are technically incompatible.\n"
+            "MISSING: report missing only when the relevant evidence is genuinely absent. Do not call an input attribute "
+            "missing merely because the candidate attribute appears in a different section.\n"
+            "Set technical_compatible=true only when supplied technical evidence supports equivalence and there are no "
+            "unresolved critical conflicts. Set it=false only when explicit technical evidence rules out equivalence. "
+            "If compatibility cannot be established because evidence is incomplete, omit technical_compatible rather "
+            "than treating missing information as a conflict.\n\n"
+            "For every returned candidate, compatibility_score is REQUIRED. It must be a numeric value from 0.0 through "
+            "1.0 and represents Gemini's advisory technical compatibility assessment based only on the supplied evidence. "
+            "It is not a calibrated probability or confidence. Do not return separate confidence, probability, score, or "
+            "final decision fields. Do not make a final MATCHED/UNCERTAIN/NEW_CANDIDATE decision and do not override "
+            "deterministic authority. Use only supplied canonical material IDs. Return at most 5 candidates."
         )
 
     @staticmethod
