@@ -55,6 +55,11 @@ def _templates(record: CatalogRecord) -> tuple[str, ...]:
         size = _value(a.size_mm)
         pressure = _value(a.pressure_class)
         connection = _value(a.connection)
+        connection_abbreviation = {
+            "flanged": "FLG",
+            "threaded": "THD",
+            "wafer": "WFR",
+        }.get(connection.casefold(), connection)
         return (
             f"{material} {valve} valve {size} mm {connection} class {pressure}",
             f"{material} {valve} valve {size}MM {connection} CL{pressure}",
@@ -62,7 +67,7 @@ def _templates(record: CatalogRecord) -> tuple[str, ...]:
             f"{valve} valve {material} {connection} {size} mm class {pressure}",
             f"{material} {valve} VLV {size} MM {connection} CL-{pressure}",
             f"{material} {valve} valve {size}mm {connection} class-{pressure}",
-            f"{material.upper()} {valve.upper()} VLV {size}MM FLG CL{pressure}",
+            f"{material.upper()} {valve.upper()} VLV {size}MM {connection_abbreviation} CL{pressure}",
             f"{material} {valve} valve; {size} mm; {connection}; class {pressure}",
         )
     if a.category == "Bearing":
