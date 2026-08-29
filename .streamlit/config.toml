@@ -15,4 +15,4 @@ showWidgetBorder = true
 baseFontSize = 17
 
 [layout]
-topPadding = "4.5rem"
+topPadding = "6rem"
