@@ -66,42 +66,46 @@ class OnboardingResult:
 
 
 def _normalize_column_name(name: str) -> str:
+    """Normalize human-readable source headers to a stable comparison key."""
     return "_".join(name.strip().lower().replace("-", " ").split())
 
 
 def map_columns(columns: Iterable[str]) -> ColumnMapping:
     """Map supported source column aliases to canonical names.
 
-    Matching is case-insensitive and whitespace/hyphen tolerant. A source
-    column is mapped at most once; ambiguous or unknown columns are reported.
+    Matching is case-insensitive and whitespace/hyphen tolerant. Each
+    canonical field may be mapped only once; duplicate/unknown source headers
+    are reported instead of silently overwriting a previous mapping.
     """
-    normalized = tuple(columns)
+    alias_to_canonical = {
+        _normalize_column_name(alias): canonical
+        for canonical, aliases in _COLUMN_ALIASES.items()
+        for alias in aliases
+    }
+
     mapping: dict[str, str] = {}
     used_canonical: set[str] = set()
     unmapped: list[str] = []
 
-    aliases = {
-        canonical: {_normalize_column_name(alias) for alias in names}
-        for canonical, names in _COLUMN_ALIASES.items()
-    }
-    for source in normalized:
-        key = _normalize_column_name(source)
-        matches = [canonical for canonical, names in aliases.items() if key in names]
-        if len(matches) == 1 and matches[0] not in used_canonical:
-            mapping[source] = matches[0]
-            used_canonical.add(matches[0])
-        else:
+    for source in tuple(columns):
+        canonical = alias_to_canonical.get(_normalize_column_name(source))
+        if canonical is None or canonical in used_canonical:
             unmapped.append(source)
+            continue
+        mapping[source] = canonical
+        used_canonical.add(canonical)
 
     return ColumnMapping(mapping=mapping, unmapped_columns=tuple(unmapped))
 
 
-def _mapped_rows(rows: Iterable[Mapping[str, object]], column_mapping: ColumnMapping) -> tuple[dict[str, str], ...]:
-    reverse = column_mapping.mapping
+def _mapped_rows(
+    rows: Iterable[Mapping[str, object]],
+    column_mapping: ColumnMapping,
+) -> tuple[dict[str, str], ...]:
     mapped: list[dict[str, str]] = []
     for row in rows:
         output = {column: "" for column in CANONICAL_COLUMNS}
-        for source, canonical in reverse.items():
+        for source, canonical in column_mapping.mapping.items():
             value = row.get(source, "")
             output[canonical] = "" if value is None else str(value).strip()
         mapped.append(output)
@@ -115,7 +119,9 @@ def validate_records(
     """Validate canonical records without mutating them."""
     material_records = tuple(records)
     total = len(material_records)
-    missing_columns = tuple(column for column in CANONICAL_COLUMNS if column not in column_mapping.mapping)
+    missing_columns = tuple(
+        column for column in CANONICAL_COLUMNS if column not in column_mapping.mapping.values()
+    )
     missing_cpse = sum(not row.get("cpse", "") for row in material_records)
     missing_codes = sum(not row.get("legacy_material_code", "") for row in material_records)
     missing_descriptions = sum(not row.get("raw_description", "") for row in material_records)
@@ -130,15 +136,16 @@ def validate_records(
             seen_codes.add(code)
 
     malformed_rows = sum(
-        1 for row in material_records
+        1
+        for row in material_records
         if any(column not in row for column in CANONICAL_COLUMNS)
     )
     invalid_rows = {
         index
         for index, row in enumerate(material_records)
-        if not row.get("legacy_material_code") or not row.get("raw_description") or any(
-            column not in row for column in CANONICAL_COLUMNS
-        )
+        if not row.get("legacy_material_code")
+        or not row.get("raw_description")
+        or any(column not in row for column in CANONICAL_COLUMNS)
     }
     valid_rows = total - len(invalid_rows)
     ready = (
