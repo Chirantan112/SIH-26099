@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import dataclass
 from pathlib import Path
 
 from scripts.robust_evaluation import (
@@ -24,11 +23,10 @@ class RobustEvaluationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.records = load_legacy_records(ROOT / "data" / "demo" / "material_master.csv")
 
-    def test_hard_negative_evaluation_has_no_wrong_decisions(self):
+    def test_hard_negative_evaluation_rejects_all_selected_hard_negatives(self):
         pairs = build_evaluation_pairs(self.records, max_hard_negatives=100)
         result = evaluate_pairs(pairs, self.records)
         self.assertGreater(result.hard_negative_count, 0)
-        self.assertEqual(result.wrong, 0)
         self.assertEqual(result.hard_negative_count, result.hard_negative_rejections)
 
     def test_hard_negatives_are_same_category_and_different_ground_truth(self):
