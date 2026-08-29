@@ -16,8 +16,8 @@ jobs:
         with:
           fetch-depth: 0
       - name: Apply CSS-only stabilization
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
           path = Path("app.py")
           text = path.read_text(encoding="utf-8")
@@ -68,6 +68,7 @@ jobs:
     }
     '''
           path.write_text(text.replace(marker, patch + marker, 1), encoding="utf-8")
+          PY
       - name: Validate and commit app.py only
         run: |
           python -m py_compile app.py
