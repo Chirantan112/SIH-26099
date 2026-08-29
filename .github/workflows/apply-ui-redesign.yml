@@ -85,7 +85,6 @@ jobs:
 '''
           text = re.sub(r'def _render_analysis\(result: HybridResult\) -> None:\n.*?\n\ndef _render_ai_consensus', analysis + 'def _render_ai_consensus', text, count=1, flags=re.S)
 
-          # Keep the current UI's backend/state code intact; only presentation blocks above are replaced.
           path.write_text(text, encoding='utf-8')
           compile(text, 'app.py', 'exec')
       - name: Commit UI-only change
@@ -97,3 +96,5 @@ jobs:
           git diff --cached -- app.py
           git commit -m "ui: apply responsive judge UI"
           git push
+
+# Triggered once more after workflow creation so the UI patch can be applied on-branch.
