@@ -3,7 +3,7 @@
 This evaluator complements the synthetic stress benchmark by constructing:
 - positive SAME pairs from legacy records sharing a ground-truth canonical ID;
 - hard-negative DIFFERENT pairs from different canonical IDs in the same category;
-- Recall@1/@3/@5 evaluation for any advisory retrieval adapter.
+- Recall@1/@3/@5 evaluation for the optional local embedding adapter.
 
 The benchmark reports UNCERTAIN separately. An UNCERTAIN result is not counted as
 an unsafe false match; it is an unresolved case that should be surfaced for review.
@@ -18,13 +18,13 @@ import itertools
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.ai_retrieval import CandidateSuggestion, RetrievalAdapter
+from src.ai_retrieval import RetrievalAdapter
 from src.attribute_extraction import MaterialAttributes, extract_attributes
 from src.catalog_mapping import CatalogRecord
 from src.record_linkage import compare_records
@@ -57,10 +57,6 @@ class RobustEvaluation:
     hard_negative_rejections: int
 
 
-def _record(code: str, description: str, category: str, ground_truth: str) -> tuple[str, MaterialAttributes]:
-    return code, extract_attributes(description).attributes
-
-
 def load_legacy_records(path: Path) -> tuple[tuple[str, MaterialAttributes, str], ...]:
     records: list[tuple[str, MaterialAttributes, str]] = []
     with path.open(newline="", encoding="utf-8") as handle:
@@ -71,6 +67,16 @@ def load_legacy_records(path: Path) -> tuple[tuple[str, MaterialAttributes, str]
     return tuple(records)
 
 
+def load_legacy_descriptions(path: Path) -> dict[str, str]:
+    """Load raw descriptions keyed by legacy code for retrieval evaluation."""
+    with path.open(newline="", encoding="utf-8") as handle:
+        return {
+            row["legacy_material_code"]: row["raw_description"]
+            for row in csv.DictReader(handle)
+            if row.get("legacy_material_code") and row.get("raw_description")
+        }
+
+
 def _hardness(left: MaterialAttributes, right: MaterialAttributes) -> tuple[int, int]:
     result = compare_records(left, right)
     return (len(result.conflicting_fields), -len(result.matching_fields))
@@ -79,19 +85,14 @@ def _hardness(left: MaterialAttributes, right: MaterialAttributes) -> tuple[int,
 def build_evaluation_pairs(records: tuple[tuple[str, MaterialAttributes, str], ...], max_hard_negatives: int = 100) -> tuple[EvaluationPair, ...]:
     pairs: list[EvaluationPair] = []
 
-    # Positives: records from different legacy codes that share the same
-    # repository-owned ground-truth canonical material ID.
     grouped: dict[str, list[tuple[str, MaterialAttributes]]] = {}
     for code, attributes, ground_truth in records:
         grouped.setdefault(ground_truth, []).append((code, attributes))
-    for ground_truth, items in sorted(grouped.items()):
+    for _, items in sorted(grouped.items()):
         for (left_code, left), (right_code, right) in itertools.combinations(items, 2):
             if left.category == right.category:
                 pairs.append(EvaluationPair(left_code, right_code, "SAME", str(left.category), "positive"))
 
-    # Hard negatives: same-category records from different canonical IDs with
-    # the fewest technical conflicts first. This intentionally targets near-miss
-    # materials such as valve pressure-class or pipe thickness differences.
     negatives: list[tuple[tuple[int, int], EvaluationPair]] = []
     for (left_code, left, left_gt), (right_code, right, right_gt) in itertools.combinations(records, 2):
         if left_gt == right_gt or left.category != right.category or left.category is None:
@@ -155,6 +156,9 @@ def retrieval_recall_at_k(
     adapter: RetrievalAdapter,
     k: int,
 ) -> float:
+    """Return the fraction of cases whose expected ID appears in top-k suggestions."""
+    if k < 1:
+        raise ValueError("k must be >= 1")
     cases = tuple(cases)
     if not cases:
         return 0.0
@@ -168,17 +172,14 @@ def retrieval_recall_at_k(
     return hits / len(cases)
 
 
-def _catalog_lookup(catalog: tuple[CatalogRecord, ...]) -> dict[str, CatalogRecord]:
-    return {record.canonical_material_id: record for record in catalog}
-
-
 def build_retrieval_cases(
     records: tuple[tuple[str, MaterialAttributes, str], ...],
     descriptions: dict[str, str],
 ) -> tuple[tuple[str, str, MaterialAttributes], ...]:
+    """Build one retrieval case per legacy record with a known canonical ID."""
     cases = []
-    for _, attributes, ground_truth in records:
-        description = descriptions.get(ground_truth)
+    for code, attributes, ground_truth in records:
+        description = descriptions.get(code)
         if description and attributes.category:
             cases.append((ground_truth, description, attributes))
     return tuple(cases)
@@ -208,6 +209,11 @@ def print_report(result: RobustEvaluation, recall: dict[int, float] | None = Non
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--max-hard-negatives", type=int, default=100)
+    parser.add_argument(
+        "--with-local-nlp",
+        action="store_true",
+        help="also evaluate LocalEmbeddingRetrievalAdapter Recall@1/@3/@5; requires optional NLP dependencies and model access",
+    )
     args = parser.parse_args()
     if args.max_hard_negatives < 1:
         parser.error("--max-hard-negatives must be >= 1")
@@ -216,7 +222,22 @@ def main() -> int:
     records = load_legacy_records(data_path)
     pairs = build_evaluation_pairs(records, args.max_hard_negatives)
     result = evaluate_pairs(pairs, records)
-    print_report(result)
+    recall = None
+
+    if args.with_local_nlp:
+        from src.local_embedding_retrieval import LocalEmbeddingRetrievalAdapter
+
+        descriptions = load_legacy_descriptions(data_path)
+        catalog = load_demo_catalog(data_path)
+        cases = build_retrieval_cases(records, descriptions)
+        adapter = LocalEmbeddingRetrievalAdapter()
+        status = adapter.status()
+        if not status.available:
+            print(f"Local NLP unavailable: {status.detail}")
+            return 2
+        recall = {k: retrieval_recall_at_k(cases, catalog, adapter, k) for k in (1, 3, 5)}
+
+    print_report(result, recall)
     return 0 if result.wrong == 0 else 1
 
 
