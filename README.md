@@ -33,80 +33,98 @@ Deterministic Record Linkage + Catalog Mapping
         +------------+-----------+
                      |
                      v
+              Human Review when needed
+                     |
+                     v
           AUTHORITATIVE FINAL DECISION
 ```
 
-`run_hybrid_pipeline()` orchestrates the unchanged deterministic LEGO #2-#5 flow and optional AI diagnostics. AI output is bounded and validated against the supplied catalog; it never changes the authoritative mapping result.
+`run_hybrid_pipeline()` orchestrates the deterministic LEGO #2-#5 flow and optional AI diagnostics. AI output is bounded and validated against the supplied catalog; it never changes the authoritative mapping result.
 
-## Decision Authority
+### Decision boundary
 
-| Component | Role | Authority |
-|---|---|---|
-| Normalization | Canonicalizes descriptions, terminology, units, punctuation, and formatting | Deterministic |
-| Attribute extraction | Extracts explicit technical material attributes | Deterministic |
-| Record linkage | Computes deterministic technical similarity/evidence | **Authoritative** |
-| Catalog mapping | Produces `MATCHED`, `UNCERTAIN`, or `NEW_CANDIDATE` | **Authoritative** |
-| Local NLP | Optional local embedding retrieval | Advisory only |
-| Gemini 2.5 Flash | Optional LLM candidate interpretation | Advisory only |
-| `run_hybrid_pipeline()` | Coordinates deterministic result plus advisory diagnostics | Deterministic result remains authoritative |
+**DETERMINISTIC ENGINE = AUTHORITATIVE**  
+**LOCAL NLP = OPTIONAL / ADVISORY**  
+**GEMINI = OPTIONAL / ADVISORY**  
+**HUMAN REVIEW = ESCALATION FOR INSUFFICIENT EVIDENCE**
 
-**AI suggestions never override, replace, filter, or feed back into the deterministic final decision.**
+## Judge-Facing Dashboard
 
-## Judge-Facing Streamlit Dashboard
-
-`app.py` provides a responsive dashboard for demonstrating the complete workflow.
-
-The interface is designed for desktop, laptop, tablet, and mobile use and presents:
+`app.py` provides a responsive dashboard for demonstrating the complete workflow. It presents:
 
 - a premium dark enterprise/industrial visual theme;
-- a persistent sidebar with a functional **Hybrid AI / Deterministic Only** mode selector;
-- explicit **AUTHORITATIVE** vs **ADVISORY** roles;
-- a material-analysis workspace with quick demo scenarios;
-- the pipeline **INPUT -> NORMALIZE -> EXTRACT -> MATCH -> AI ADVISE -> DECIDE**;
-- a prominent authoritative decision card;
-- normalization and technical-attribute evidence;
-- deterministic candidate evidence;
-- separate Local NLP and Gemini 2.5 Flash advisory sections;
-- graceful empty-input, unavailable-service, fallback, and no-candidate states;
-- stale-result protection when the analysis mode changes after a result has been produced.
+- Hybrid AI / Deterministic Only mode selection;
+- explicit AUTHORITATIVE vs ADVISORY roles;
+- quick demo scenarios for MATCHED, UNCERTAIN and NEW CANDIDATE states;
+- the six-stage INPUT -> NORMALIZE -> EXTRACT -> MATCH -> AI ADVISE -> DECIDE pipeline;
+- authoritative decision and technical evidence;
+- separate Local NLP and Gemini advisory sections;
+- graceful unavailable-service and deterministic-fallback states;
+- responsive evidence tables and mobile-friendly presentation.
 
 The dashboard does not use fake confidence values, fake analytics, or fabricated AI behavior.
+
+## Evaluation & Benchmark Evidence
+
+The repository includes a reproducible synthetic stress benchmark at `scripts/benchmark.py`. It generates controlled CPSE-style description variants from the canonical demo catalog and reports:
+
+- exact canonical mapping rate;
+- UNCERTAIN rate;
+- wrong mapping rate;
+- runtime and throughput;
+- distinct canonical-pair safety outcomes.
+
+The benchmark is deliberately labelled as synthetic. It is a regression/stress test, not evidence of production CPSE accuracy.
+
+Run it with:
+
+```powershell
+python scripts/benchmark.py
+python scripts/benchmark.py --variants-per-material 50
+```
+
+The benchmark exits non-zero if a generated equivalent description maps to the wrong canonical material. See [`docs/benchmark_protocol.md`](docs/benchmark_protocol.md) for the evidence boundary and extension plan.
+
+## Continuous Verification
+
+GitHub Actions now runs the deterministic test suite and synthetic benchmark on Python 3.11 and 3.12 for pushes to the readiness branch and pull requests targeting `main`.
+
+Local verification:
+
+```powershell
+python -m unittest discover -s tests -v
+python scripts/benchmark.py
+```
+
+Optional AI dependencies are intentionally not required for the deterministic CI job. This keeps core verification independent of Gemini credentials, model downloads, or network services.
 
 ## AI Advisory Components
 
 ### Local NLP
 
-Local NLP is implemented as an optional local embedding retrieval adapter. When its optional embedding dependencies are available, it produces advisory catalog candidates from the supplied catalog.
+Local NLP is an optional local embedding retrieval adapter. When its optional embedding dependencies are available, it produces advisory catalog candidates from the supplied catalog.
 
-It is:
-
-- optional;
-- local/offline when the required optional dependencies are available;
-- lazily initialized;
-- advisory only;
-- never used to override deterministic mapping.
-
-The cloud deployment environment must install the required Local NLP dependencies before claiming that Local NLP is available in the deployed app.
+It is lazy, bounded, fault-tolerant, and never used to override deterministic mapping.
 
 ### Gemini 2.5 Flash
 
-Gemini uses:
+Gemini uses `gemini-2.5-flash` for advisory candidate interpretation and technical evidence. It does not produce the authoritative mapping decision, confidence, probability, or deterministic decision state.
 
-```text
-gemini-2.5-flash
-```
-
-Its role is limited to returning advisory catalog candidates and short reasons. It does not produce the authoritative mapping decision, confidence, probability, or deterministic decision state.
-
-Configure the credential using:
-
-```text
-GEMINI_API_KEY
-```
-
-Never place the credential in source code, tests, README files, commits, or repository configuration.
+Configure credentials using `GEMINI_API_KEY`. Never commit the credential.
 
 If Gemini is unavailable, missing credentials, or fails, the application safely continues with deterministic matching.
+
+## Human Review & Auditability
+
+The governance layer records analysis and reviewer actions in an append-only, session-friendly audit trail. Review actions are constrained to `APPROVE`, `REJECT`, or `REVIEW`, with timestamp, deterministic decision, selected candidate and reviewer note available for export by the UI.
+
+The prototype deliberately keeps governance storage independent from the matching engine so a production deployment can replace in-memory storage with an approved database without changing the decision contract.
+
+## Real-World Integration Boundary
+
+The current demo source is the repository's validated CSV material master. An explicit `SAPMaterialCatalogSource` integration boundary exists, but live SAP/ERP connectivity is **not claimed or configured** because CPSE endpoint contracts and credentials are not available in this prototype.
+
+This distinction is intentional: the repository demonstrates the harmonization engine and integration contract without pretending that a live enterprise connector exists.
 
 ## Demo Example
 
@@ -116,7 +134,7 @@ Representative input:
 CS GATE VLV 50MM FLG CL150
 ```
 
-The application normalizes the legacy description, extracts explicit technical attributes, performs deterministic catalog mapping, and displays the authoritative result. When AI Advisory is enabled, Local NLP and Gemini 2.5 Flash may provide additional candidates and reasons without changing that deterministic result.
+The application normalizes the legacy description, extracts explicit technical attributes, performs deterministic catalog mapping, and displays the authoritative result. When AI Advisory is enabled, Local NLP and Gemini may provide additional candidates and reasons without changing that deterministic result.
 
 Available demonstration states:
 
@@ -128,13 +146,17 @@ Available demonstration states:
 
 ```text
 SIH-26099/
+├── .github/workflows/ci.yml
 ├── app.py
 ├── README.md
 ├── data/
 │   ├── demo/
 │   └── evaluation/
 ├── docs/
+│   ├── benchmark_protocol.md
 │   └── dataset_design.md
+├── scripts/
+│   └── benchmark.py
 ├── src/
 │   ├── ai_retrieval.py
 │   ├── attribute_extraction.py
@@ -149,17 +171,19 @@ SIH-26099/
 │   ├── normalization.py
 │   └── record_linkage.py
 └── tests/
+    ├── test_benchmark.py
     └── ...
 ```
 
 ## Run Locally
 
-Create/use a Python virtual environment and install the project's required dependencies for the environment you are testing.
+Create/use a Python virtual environment and install the project's required dependencies.
 
-Run the deterministic regression suite:
+Run deterministic verification:
 
 ```powershell
 python -m unittest discover -s tests -v
+python scripts/benchmark.py
 ```
 
 Launch the dashboard:
@@ -170,31 +194,25 @@ python -m streamlit run app.py
 
 ## Streamlit Community Cloud
 
-For a reproducible cloud deployment, the repository must include the dependency configuration required by the selected environment, including the packages required for optional Local NLP and Gemini functionality.
-
 Configure the Gemini credential in the deployment's Secrets configuration:
 
 ```toml
 GEMINI_API_KEY = "your-key"
 ```
 
-Never commit this value to GitHub.
-
-The laptop's `.venv` is **not** part of the repository and must not be committed. Cloud environments create their own runtime from the repository dependency configuration.
+Never commit this value to GitHub. The laptop's `.venv` is not part of the repository.
 
 ## Safety and Decision Boundary
 
 The project intentionally separates deterministic engineering logic from AI assistance:
 
-- **DETERMINISTIC ENGINE = AUTHORITATIVE**
-- **LOCAL NLP = OPTIONAL / ADVISORY**
-- **GEMINI 2.5 FLASH = OPTIONAL / LLM / ADVISORY**
-
-AI candidates must refer to canonical IDs already present in the supplied catalog. Invalid, malformed, duplicate, or unknown candidates are rejected by the validation/orchestration layer.
-
-When AI Advisory is disabled, Local NLP and Gemini are not invoked. Deterministic processing continues normally.
-
-Missing or conflicting technical information is handled conservatively by the deterministic matching logic.
+- deterministic normalization and attribute extraction are reproducible;
+- deterministic record linkage and catalog mapping are authoritative;
+- AI candidates must refer to canonical IDs already present in the supplied catalog;
+- invalid, malformed, duplicate, or unknown AI candidates are rejected;
+- missing or conflicting technical information is handled conservatively;
+- AI failures do not break deterministic processing;
+- credentials belong in environment/deployment secrets, never in the repository.
 
 ## Project Principles
 
@@ -203,6 +221,8 @@ Missing or conflicting technical information is handled conservatively by the de
 3. AI cannot override deterministic decisions.
 4. Candidate IDs are validated against the supplied catalog.
 5. Missing or conflicting technical information is handled conservatively.
-6. The core harmonization flow remains usable without external AI services.
-7. Credentials belong in environment/deployment secrets, never in the repository.
-8. The dashboard should remain understandable and usable across device sizes.
+6. Core harmonization remains usable without external AI services.
+7. Benchmarks are reproducible and their evidence boundary is explicit.
+8. Production CPSE integration is not claimed without an approved interface contract.
+9. Human review is available for unresolved evidence.
+10. Credentials never belong in source code or repository configuration.
