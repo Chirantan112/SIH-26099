@@ -1,5 +1,8 @@
-"""Judge-facing Streamlit dashboard for CPSE material harmonization."""
+"""Streamlit UI for CPSE material harmonization.
 
+Presentation-only branch: matching, AI, and governance modules remain untouched.
+Deterministic mapping remains authoritative; AI output is advisory.
+"""
 from __future__ import annotations
 
 from dataclasses import fields
@@ -10,25 +13,24 @@ from typing import Any, Callable
 
 from src.ai_retrieval import CandidateSuggestion, UnavailableRetrievalAdapter
 from src.attribute_extraction import MaterialAttributes
-from src.demo_pipeline import load_demo_catalog
 from src.governance import AuditTrail
 from src.hybrid_pipeline import HybridResult, run_hybrid_pipeline
 from src.llm_interpretation import UnavailableLLMAdapter
-from src.source_adapters import CSVMaterialCatalogSource, SAPMaterialCatalogSource
+from src.source_adapters import CSVMaterialCatalogSource
 
 try:
     import streamlit as st
-except ModuleNotFoundError:  # pragma: no cover
+except ModuleNotFoundError:
     st = None
 
 try:
     from src.gemini_llm import GeminiLLMAdapter
-except Exception:  # pragma: no cover
+except Exception:
     GeminiLLMAdapter = None
 
 try:
     from src.local_embedding_retrieval import LocalEmbeddingRetrievalAdapter
-except Exception:  # pragma: no cover
+except Exception:
     LocalEmbeddingRetrievalAdapter = None
 
 ROOT = Path(__file__).resolve().parent
@@ -38,15 +40,29 @@ DEMO_EXAMPLES = {
     "UNCERTAIN": "GATE VLV CS 50MM CL150",
     "NEW CANDIDATE": "PIPE CS OD 999 MM THK 3 MM SCH-40 PLAIN END",
 }
-
 ATTRIBUTE_LABELS = {
-    "category": "Category", "valve_type": "Valve type", "material": "Material",
-    "size_mm": "Size (mm)", "pressure_class": "Pressure class", "connection": "Connection",
-    "bearing_family": "Bearing family", "dimensions": "Dimensions (mm)",
-    "dimension_unit_present": "Dimension unit stated", "od_mm": "Outside diameter (mm)",
-    "thickness_mm": "Thickness (mm)", "schedule": "Schedule", "end": "End",
+    "category": "Category",
+    "valve_type": "Valve type",
+    "material": "Material",
+    "size_mm": "Size (mm)",
+    "pressure_class": "Pressure class",
+    "connection": "Connection",
+    "bearing_family": "Bearing family",
+    "dimensions": "Dimensions (mm)",
+    "dimension_unit_present": "Dimension unit stated",
+    "od_mm": "Outside diameter (mm)",
+    "thickness_mm": "Thickness (mm)",
+    "schedule": "Schedule",
+    "end": "End",
 }
-
+KEY_ATTRIBUTES = (
+    ("Category", "category"),
+    ("Valve type", "valve_type"),
+    ("Material", "material"),
+    ("Size", "size_mm"),
+    ("Pressure", "pressure_class"),
+    ("Connection", "connection"),
+)
 PIPELINE_STAGES = (
     ("01", "INPUT", "Legacy description", "input"),
     ("02", "NORMALIZE", "Canonical text", "normalize"),
@@ -63,22 +79,46 @@ def _display_value(value: Any) -> str:
     if isinstance(value, bool):
         return "Yes" if value else "No"
     if isinstance(value, tuple):
-        return " × ".join(str(item) for item in value)
+        return " × ".join(map(str, value))
     if isinstance(value, Decimal):
         return str(value)
     return str(value)
 
 
 def attribute_rows(attributes: MaterialAttributes) -> list[dict[str, str]]:
-    return [{"Attribute": ATTRIBUTE_LABELS[field.name], "Extracted value": _display_value(getattr(attributes, field.name))} for field in fields(attributes)]
+    return [
+        {
+            "Attribute": ATTRIBUTE_LABELS[field.name],
+            "Extracted value": _display_value(getattr(attributes, field.name)),
+        }
+        for field in fields(attributes)
+    ]
 
 
-def candidate_rows(candidates: tuple[Any, ...]) -> list[dict[str, str | float]]:
-    return [{"Canonical material ID": c.canonical_material_id, "Decision": c.decision, "Score": c.score, "Explanation": c.explanation} for c in candidates]
+def candidate_rows(candidates: tuple[Any, ...]) -> list[dict[str, Any]]:
+    return [
+        {
+            "Canonical material ID": candidate.canonical_material_id,
+            "Decision": candidate.decision,
+            "Score": candidate.score,
+            "Explanation": candidate.explanation,
+        }
+        for candidate in candidates
+    ]
 
 
-def advisory_rows(suggestions: tuple[CandidateSuggestion, ...], score_label: str) -> list[dict[str, str | float]]:
-    return [{"Canonical material ID": s.canonical_material_id, "Source": s.source, score_label: s.score, "Reason": s.explanation} for s in suggestions]
+def advisory_rows(
+    candidates: tuple[CandidateSuggestion, ...], score_label: str
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "Canonical material ID": candidate.canonical_material_id,
+            "Source": candidate.source,
+            score_label: candidate.score,
+            "Reason": candidate.explanation,
+        }
+        for candidate in candidates
+    ]
 
 
 def _friendly_status(status: Any) -> str:
@@ -92,226 +132,303 @@ def _friendly_status(status: Any) -> str:
     return "Advisory unavailable"
 
 
-def _analysis_adapters(ai_enabled: bool) -> tuple[Any, Any]:
-    if not ai_enabled:
-        return UnavailableRetrievalAdapter("AI advisory is disabled."), UnavailableLLMAdapter("AI advisory is disabled.")
-    retrieval = LocalEmbeddingRetrievalAdapter() if LocalEmbeddingRetrievalAdapter is not None else UnavailableRetrievalAdapter("Local NLP adapter is unavailable.")
-    llm = GeminiLLMAdapter() if GeminiLLMAdapter is not None else UnavailableLLMAdapter("Gemini adapter is unavailable.")
+def _analysis_adapters(enabled: bool) -> tuple[Any, Any]:
+    if not enabled:
+        return (
+            UnavailableRetrievalAdapter("AI advisory is disabled."),
+            UnavailableLLMAdapter("AI advisory is disabled."),
+        )
+    retrieval = (
+        LocalEmbeddingRetrievalAdapter()
+        if LocalEmbeddingRetrievalAdapter
+        else UnavailableRetrievalAdapter("Local NLP adapter is unavailable.")
+    )
+    llm = (
+        GeminiLLMAdapter()
+        if GeminiLLMAdapter
+        else UnavailableLLMAdapter("Gemini adapter is unavailable.")
+    )
     return retrieval, llm
 
 
-def analyze_material(description: str | None, catalog: tuple[Any, ...], ai_enabled: bool, retrieval_adapter: Any | None = None, llm_adapter: Any | None = None, progress_callback: Callable[[str], None] | None = None) -> HybridResult:
-    """Run the existing hybrid orchestration; the deterministic result stays authoritative."""
+def analyze_material(
+    description: str | None,
+    catalog: tuple[Any, ...],
+    ai_enabled: bool,
+    retrieval_adapter: Any | None = None,
+    llm_adapter: Any | None = None,
+    progress_callback: Callable[[str], None] | None = None,
+) -> HybridResult:
     if not ai_enabled:
-        retrieval_adapter = UnavailableRetrievalAdapter("AI advisory is disabled.")
-        llm_adapter = UnavailableLLMAdapter("AI advisory is disabled.")
+        retrieval_adapter, llm_adapter = _analysis_adapters(False)
     elif retrieval_adapter is None or llm_adapter is None:
         retrieval_adapter, llm_adapter = _analysis_adapters(True)
-    return run_hybrid_pipeline(description, catalog, legacy_material_code="DASHBOARD-INPUT", retrieval_adapter=retrieval_adapter, llm_adapter=llm_adapter, progress_callback=progress_callback)
+    return run_hybrid_pipeline(
+        description,
+        catalog,
+        legacy_material_code="DASHBOARD-INPUT",
+        retrieval_adapter=retrieval_adapter,
+        llm_adapter=llm_adapter,
+        progress_callback=progress_callback,
+    )
 
 
-def _inject_styles() -> None:
-    st.markdown("""
-    <style>
-    :root{--bg:#050b14;--panel:#091524;--panel2:#0c1a2b;--panel3:#0f2033;--line:#20344a;--text:#f4f8fc;--muted:#91a8be;--green:#55e39a;--cyan:#42c8ee;--purple:#b993ff;--amber:#f1bd63;--danger:#ef6b73}
-    .stApp{background:radial-gradient(900px 500px at 80% -5%,rgba(44,121,168,.16),transparent 60%),radial-gradient(700px 420px at 10% 30%,rgba(29,72,118,.08),transparent 62%),var(--bg);color:var(--text)}
-    .block-container{max-width:1680px;padding:1rem clamp(.75rem,1.8vw,2rem) 2rem}
-    [data-testid="stSidebar"]{background:linear-gradient(180deg,#06111e,#071321);border-right:1px solid var(--line)}
-    [data-testid="stSidebar"] .block-container{padding:.9rem .85rem 1.2rem}
-    [data-testid="stSidebar"] [data-testid="stRadio"] label{font-weight:760}
-    .brand{font-size:1rem;font-weight:950;line-height:1.03;letter-spacing:-.02em}.sub{margin-top:.4rem;color:var(--muted);font-size:.68rem}
-    .side-kicker{margin-top:1.15rem;margin-bottom:.45rem;color:#8ea6bd;font-size:.62rem;font-weight:900;letter-spacing:.15em;text-transform:uppercase}
-    .side-row{display:flex;align-items:center;gap:.45rem;padding:.5rem 0;border-bottom:1px solid rgba(145,168,190,.09);font-size:.73rem}.side-right{margin-left:auto;color:#9db1c4;font-size:.6rem;font-weight:850;letter-spacing:.06em}.side-note{color:var(--muted);font-size:.67rem;line-height:1.45}
-    .dot-green{color:var(--green)}.dot-purple{color:var(--purple)}.dot-cyan{color:var(--cyan)}.dot-amber{color:var(--amber)}
-    .hero{position:relative;overflow:hidden;padding:clamp(1.25rem,2.5vw,1.9rem);border:1px solid var(--line);border-radius:24px;background:linear-gradient(135deg,rgba(12,37,57,.96),rgba(5,14,24,.98) 74%);box-shadow:0 24px 60px rgba(0,0,0,.22)}
-    .hero:after{content:"";position:absolute;right:-10%;top:-65%;width:45%;height:220%;transform:rotate(18deg);background:linear-gradient(90deg,transparent,rgba(66,200,238,.035),transparent);pointer-events:none}
-    .eyebrow,.section-kicker{color:#a9bacb;font-size:.63rem;font-weight:900;letter-spacing:.18em;text-transform:uppercase}.hero-title{margin-top:.42rem;font-size:clamp(2.05rem,4.4vw,3.8rem);font-weight:950;line-height:.98;letter-spacing:-.06em}.hero-sub{max-width:1080px;margin-top:.7rem;color:#9db1c4;font-size:clamp(.86rem,1.35vw,1rem);line-height:1.55}.pills{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}.pill{padding:.36rem .7rem;border:1px solid var(--line);border-radius:999px;color:#d2dde7;background:rgba(255,255,255,.025);font-size:.64rem;font-weight:850}.pill.online{color:var(--green);border-color:rgba(85,227,154,.3)}
-    .decision-banner{margin-top:.8rem;padding:.65rem .85rem;border:1px solid var(--line);border-radius:12px;background:rgba(8,19,32,.78);color:#9eb3c7;font-size:.72rem}.decision-banner strong{color:#f4f8fc}
-    .workspace{margin-top:1rem}.section-title{font-size:.82rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#b4c3d1;margin-bottom:.65rem}
-    .card{padding:1rem;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,rgba(12,27,44,.96),rgba(7,17,29,.96));box-shadow:0 12px 28px rgba(0,0,0,.14)}
-    .service-card{min-height:108px}.service-kicker{color:#9fb2c4;font-size:.6rem;font-weight:900;letter-spacing:.11em}.service-main{margin-top:.55rem;font-size:.95rem;font-weight:950}.service-main.green{color:var(--green)}.service-main.purple{color:var(--purple)}.service-note{margin-top:.35rem;color:var(--muted);font-size:.69rem;line-height:1.4}
-    .input-card{padding:1rem;border:1px solid var(--line);border-radius:18px;background:rgba(8,18,31,.84)}.input-label{font-size:.78rem;font-weight:900}.scenario-label{margin-top:.7rem;color:#91a7bc;font-size:.63rem;font-weight:800}.scenario-buttons{display:flex;gap:.45rem;flex-wrap:wrap}
-    .pipeline{margin-top:.8rem;padding:.9rem;border:1px solid var(--line);border-radius:18px;background:rgba(6,15,26,.9)}.pipeline-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}.pipeline-head span{color:#aebfd0;font-size:.63rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.pipeline-head small{color:#637b92;font-size:.61rem}.flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.4rem}.stage{min-width:0;padding:.72rem .55rem;border:1px solid var(--line);border-radius:13px;background:linear-gradient(180deg,#0b1929,#07111e);position:relative;transition:border-color .15s,background .15s,box-shadow .15s}.stage:not(:last-child):after{content:"→";position:absolute;right:-.42rem;top:50%;transform:translateY(-50%);z-index:2;color:#5d7891;font-size:.8rem}.stage-icon{float:right;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid #334b60;color:#637b92;font-size:.75rem;font-weight:950}.stage.done{border-color:rgba(85,227,154,.55);background:linear-gradient(180deg,rgba(14,58,42,.72),rgba(7,27,24,.92));box-shadow:0 0 18px rgba(85,227,154,.09)}.stage.done .stage-icon{background:var(--green);border-color:var(--green);color:#062016}.stage.active{border-color:rgba(66,200,238,.65);box-shadow:0 0 20px rgba(66,200,238,.12)}.stage.active .stage-icon{border-color:var(--cyan);color:var(--cyan);animation:pulse 1s infinite}.stage.skipped{opacity:.48}.stage.skipped .stage-icon{color:#5b7084;border-color:#33485b}.stage.unavailable{border-color:rgba(241,189,99,.65);background:linear-gradient(180deg,rgba(68,48,17,.55),rgba(31,23,11,.9));box-shadow:0 0 18px rgba(241,189,99,.08)}.stage.unavailable .stage-icon{background:var(--amber);border-color:var(--amber);color:#2a1c05}.stage-num{color:var(--cyan);font-size:.6rem;font-weight:950;letter-spacing:.1em}.stage-name{margin-top:.35rem;font-size:.65rem;font-weight:900;white-space:nowrap}.stage-note{margin-top:.3rem;color:#8299ad;font-size:.57rem;line-height:1.3}@keyframes pulse{50%{box-shadow:0 0 0 6px rgba(66,200,238,0)}}
-    .authority{height:100%;min-height:305px;padding:1.2rem;border:1px solid rgba(85,227,154,.4);border-radius:20px;background:radial-gradient(circle at 90% 5%,rgba(85,227,154,.1),transparent 35%),linear-gradient(145deg,rgba(15,62,45,.34),rgba(6,18,26,.98));box-shadow:0 18px 45px rgba(0,0,0,.2)}.authority-label{color:var(--green);font-size:.63rem;font-weight:950;letter-spacing:.13em;text-transform:uppercase}.authority-id{margin-top:.6rem;font-size:clamp(2rem,3.4vw,3rem);font-weight:950;line-height:1;letter-spacing:-.055em}.decision-pill{display:inline-block;margin-top:.55rem;padding:.35rem .62rem;border-radius:999px;border:1px solid rgba(85,227,154,.35);color:#c8f5d9;font-size:.6rem;font-weight:950;letter-spacing:.08em}.decision-pill.uncertain{color:#f5cf82;border-color:rgba(241,189,99,.4)}.decision-pill.new{color:#90dcf2;border-color:rgba(66,200,238,.4)}.authority-score{margin-top:.85rem;color:var(--green);font-size:1.15rem;font-weight:900}.authority-explain{margin-top:.25rem;color:#91a8ba;font-size:.64rem;line-height:1.4}.empty-authority{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;color:#71869a}.empty-authority .authority-id{color:#6f8498;font-size:1.7rem}
-    .glance{margin-top:.7rem;padding:.85rem;border:1px solid var(--line);border-radius:14px;background:rgba(7,16,28,.72)}.glance-title{color:#b5c5d4;font-size:.6rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase}.glance-row{display:flex;justify-content:space-between;gap:.5rem;padding:.36rem 0;border-bottom:1px solid rgba(145,168,190,.08);font-size:.62rem}.glance-row:last-child{border-bottom:0}.glance-row span:first-child{color:#8198ac}.glance-row span:last-child{color:#d9e3eb;text-align:right}
-    .result-section{margin-top:1rem}.result-head{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:.65rem}.result-head h2{margin:0;font-size:1.35rem;letter-spacing:-.03em}.result-head p{margin:0;color:var(--muted);font-size:.67rem;text-align:right}.evidence-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}.evidence{padding:.8rem;border:1px solid var(--line);border-radius:14px;background:rgba(8,18,31,.78)}.evidence-label{color:#91a8bd;font-size:.59rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase}.evidence-value{margin-top:.4rem;color:#e3ebf2;font-size:.68rem;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
-    .consensus{margin-top:.8rem;padding:1rem;border:1px solid rgba(66,200,238,.26);border-radius:18px;background:linear-gradient(145deg,rgba(12,36,55,.28),rgba(7,15,26,.96))}.consensus-head{display:flex;align-items:center;justify-content:space-between;gap:.7rem}.consensus-title{color:#dce8f2;font-size:.95rem;font-weight:950;letter-spacing:.06em;text-transform:uppercase}.consensus-pill{padding:.38rem .68rem;border-radius:999px;border:1px solid rgba(85,227,154,.4);color:#c8f5d9;font-size:.62rem;font-weight:950;letter-spacing:.08em}.consensus-pill.uncertain{color:#f5cf82;border-color:rgba(241,189,99,.45)}.consensus-pill.new{color:#90dcf2;border-color:rgba(66,200,238,.45)}.consensus-pill.unavailable{color:#9aaaba;border-color:#34495c}.consensus-candidate{margin-top:.5rem;color:#eef6fb;font-size:.78rem;font-weight:850}.consensus-reason{margin-top:.25rem;color:var(--muted);font-size:.67rem;line-height:1.45}.consensus-sources{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;margin-top:.7rem}.consensus-source{padding:.65rem;border:1px solid rgba(145,168,190,.12);border-radius:12px;background:rgba(8,16,28,.7)}.consensus-source-label{color:var(--purple);font-size:.59rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.consensus-source-value{margin-top:.3rem;color:#d7e2eb;font-size:.63rem;line-height:1.45}.consensus-authority{margin-top:.65rem;padding:.6rem .7rem;border-radius:11px;background:rgba(85,227,154,.05);border:1px solid rgba(85,227,154,.16);color:#b8cbd8;font-size:.63rem}.consensus-authority strong{color:var(--green)}
-    .advisory{margin-top:.8rem;padding:1rem;border:1px solid rgba(185,147,255,.22);border-radius:18px;background:linear-gradient(145deg,rgba(42,27,65,.16),rgba(7,15,26,.94))}.advisory-head{font-size:.95rem;font-weight:950}.advisory-head span{color:var(--purple)}.advisory-note{margin-top:.25rem;color:var(--muted);font-size:.66rem}.advisory-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem;margin-top:.7rem}.advisory-card{padding:.75rem;border:1px solid rgba(185,147,255,.2);border-radius:14px;background:rgba(10,17,29,.82)}.advisory-label{color:var(--purple);font-size:.6rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
-    .review-card{margin-top:.8rem;padding:1rem;border:1px solid rgba(66,200,238,.22);border-radius:18px;background:linear-gradient(145deg,rgba(11,32,49,.72),rgba(7,15,26,.96))}.review-kicker{color:var(--cyan);font-size:.6rem;font-weight:950;letter-spacing:.13em;text-transform:uppercase}.review-title{margin-top:.35rem;color:#eef6fb;font-size:.95rem;font-weight:950}.review-note{margin-top:.3rem;color:var(--muted);font-size:.66rem;line-height:1.45}.audit-card{margin-top:.8rem;padding:1rem;border:1px solid rgba(145,168,190,.15);border-radius:18px;background:rgba(7,16,28,.78)}.audit-title{font-size:.82rem;font-weight:950;color:#dce8f2}.audit-note{margin-top:.25rem;color:var(--muted);font-size:.63rem}
-    .footer{margin-top:1.4rem;padding-top:.8rem;border-top:1px solid var(--line);color:#62798f;font-size:.58rem;letter-spacing:.04em}
-    div[data-testid="stButton"] button{border-radius:10px;font-weight:800;border:1px solid var(--line);min-height:2.35rem;white-space:normal;font-size:.72rem;padding:.4rem .35rem;line-height:1.15}div[data-testid="stButton"] button[kind="primary"]{background:linear-gradient(90deg,#20a7db,#2bc2ec);border:0;color:#04111b;box-shadow:0 8px 22px rgba(40,190,235,.16)}
-    textarea{border-radius:12px!important}.stAlert{border-radius:12px}.stExpander{border-color:var(--line);border-radius:13px}
-    @media(max-width:1150px){.flow{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:.55rem}.stage:not(:last-child):after{display:none}.authority{min-height:260px}.hero-title{font-size:clamp(2rem,5vw,3rem)}}
-    @media(max-width:760px){.block-container{padding:.65rem .55rem 1.2rem}.hero{border-radius:17px;padding:1rem}.hero-title{font-size:2rem}.architecture-grid,.advisory-grid,.evidence-grid,.consensus-sources{grid-template-columns:1fr}.flow{grid-template-columns:repeat(2,minmax(0,1fr))}.stage{min-height:82px}.pipeline{padding:.7rem}.authority{min-height:230px}.result-head{display:block}.result-head p{text-align:left;margin-top:.3rem}.side-note{font-size:.65rem}}
-    @media(max-width:430px){.hero-title{font-size:1.72rem}.hero-sub{font-size:.78rem}.flow{grid-template-columns:1fr}.stage{min-height:70px}.stage:not(:last-child):after{display:block;content:"↓";right:50%;top:auto;bottom:-.7rem;transform:translateX(50%)}.pills{gap:.35rem}.pill{font-size:.57rem}.scenario-buttons{display:grid;grid-template-columns:1fr 1fr}.scenario-buttons button{width:100%}.consensus-head{align-items:flex-start;flex-direction:column}}
-    </style>
-    """, unsafe_allow_html=True)
+def _css() -> None:
+    st.markdown(
+        """
+<style>
+:root{--bg:#050c15;--panel:#091522;--panel2:#0d1d2d;--line:#203b53;--text:#eef6fb;--muted:#8da6b9;--cyan:#36c6ee;--green:#4ee39a;--purple:#b68cff;--amber:#f2c36e;--red:#ff6f79}
+.stApp{background:radial-gradient(900px 500px at 76% -10%,rgba(54,198,238,.12),transparent 62%),radial-gradient(700px 420px at 100% 75%,rgba(78,227,154,.055),transparent 65%),var(--bg);color:var(--text)}
+.block-container{max-width:1600px;padding:1rem clamp(.45rem,1.6vw,1.4rem) 2rem}
+[data-testid="stSidebar"]{background:#06111e;border-right:1px solid var(--line)}
+[data-testid="stSidebar"]>div:first-child{padding-top:1rem}
+.brand{font-size:1.03rem;font-weight:950;line-height:1.03;letter-spacing:-.025em}.brand-mark{color:var(--cyan);margin-right:.25rem}.sub{color:#7891a5;font-size:.62rem;margin-top:.25rem}.side-kicker{margin:1.15rem 0 .45rem;color:#7f9bb0;font-size:.55rem;font-weight:950;letter-spacing:.16em;text-transform:uppercase}.side-row{display:flex;align-items:center;gap:.42rem;padding:.5rem 0;border-bottom:1px solid rgba(141,166,185,.08);font-size:.68rem}.side-right{margin-left:auto;color:#9db2c1;font-size:.5rem;font-weight:950}.dot-green{color:var(--green)}.dot-cyan{color:var(--cyan)}.dot-purple{color:var(--purple)}.dot-amber{color:var(--amber)}
+[data-testid="stSidebar"] [data-testid="stSegmentedControl"]{width:100%}[data-testid="stSidebar"] [data-testid="stSegmentedControl"] button{background:#091827!important;color:#b7c7d3!important;border-color:var(--line)!important;font-weight:850!important}[data-testid="stSidebar"] [data-testid="stSegmentedControl"] button[aria-pressed="true"]{background:#102e40!important;color:var(--cyan)!important;border-color:var(--cyan)!important}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.15rem 0 .9rem}.top-title{font-size:clamp(1.35rem,2.4vw,2.15rem);font-weight:950;letter-spacing:-.045em}.top-sub{margin-top:.18rem;color:#8da6b9;font-size:.68rem}.top-status{display:flex;align-items:center;gap:.5rem;padding:.45rem .7rem;border:1px solid var(--line);border-radius:999px;background:#091827;color:#c8d8e2;font-size:.57rem;font-weight:900;white-space:nowrap}.top-status b{color:var(--green)}
+.hero{position:relative;overflow:hidden;padding:clamp(1.05rem,2.2vw,1.7rem);border:1px solid #25465e;border-radius:22px;background:linear-gradient(135deg,#102d43 0%,#07131f 72%);box-shadow:0 24px 70px #0005}.hero:after{content:"";position:absolute;right:-150px;top:-190px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(54,198,238,.16),transparent 68%)}.eyebrow{position:relative;z-index:1;color:#a9bfce;font-size:.55rem;font-weight:950;letter-spacing:.18em}.hero-title{position:relative;z-index:1;margin-top:.48rem;font-size:clamp(2rem,4.4vw,4.15rem);font-weight:950;line-height:.94;letter-spacing:-.065em}.hero-title span{color:var(--cyan)}.hero-sub{position:relative;z-index:1;max-width:920px;margin-top:.75rem;color:#a7bac8;font-size:clamp(.72rem,1vw,.91rem);line-height:1.55}.hero-pills{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:.38rem;margin-top:1rem}.pill{padding:.33rem .58rem;border:1px solid #315069;border-radius:999px;color:#d0dee7;background:#ffffff05;font-size:.52rem;font-weight:900}.pill.online{color:var(--green);border-color:#4ee39a52}
+.trust-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.45rem;margin-top:.55rem}.trust-card{padding:.65rem .72rem;border:1px solid var(--line);border-radius:12px;background:#08131f}.trust-card small{display:block;color:#7994a9;font-size:.48rem;font-weight:950;letter-spacing:.09em;text-transform:uppercase}.trust-card strong{display:block;margin-top:.2rem;font-size:.62rem}.trust-card.primary strong{color:var(--green)}
+.workspace{margin-top:.8rem}.section-title{margin-bottom:.5rem;color:#a9bdca;font-size:.61rem;font-weight:950;letter-spacing:.14em;text-transform:uppercase}.card{padding:.9rem;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,#0b1c2c,#07121e);box-shadow:0 12px 32px #0003}.input-head{display:flex;justify-content:space-between;align-items:end;gap:.6rem}.input-title{font-size:.86rem;font-weight:950}.input-note{color:#8199ab;font-size:.55rem}.scenario-label{margin:.62rem 0 .35rem;color:#91a8b8;font-size:.53rem;font-weight:850}.scenario-buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:.35rem}
+.pipeline{margin-top:.55rem;padding:.7rem;border:1px solid var(--line);border-radius:15px;background:#050e18e8}.pipeline-head{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.5rem}.pipeline-head span{color:#aec0cc;font-size:.53rem;font-weight:950;letter-spacing:.1em;text-transform:uppercase}.pipeline-head small{color:#60788b;font-size:.49rem}.flow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.3rem}.stage{position:relative;min-width:0;padding:.55rem .43rem;border:1px solid var(--line);border-radius:10px;background:#091725}.stage:not(:last-child):after{content:"→";position:absolute;right:-.34rem;top:50%;transform:translateY(-50%);z-index:2;color:#59758a}.stage.done{border-color:#4ee39a70;background:#0b342777}.stage.active{border-color:#36c6ee77}.stage.unavailable{border-color:#f2c36e70;background:#3b2d1370}.stage.skipped{opacity:.48}.stage-icon{float:right;width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid #38556c;color:#7590a3;font-size:.55rem;font-weight:950}.stage.done .stage-icon{background:var(--green);border-color:var(--green);color:#062016}.stage.active .stage-icon{border-color:var(--cyan);color:var(--cyan)}.stage.unavailable .stage-icon{background:var(--amber);border-color:var(--amber);color:#261b05}.stage-num{color:var(--cyan);font-size:.46rem;font-weight:950}.stage-name{margin-top:.27rem;font-size:.53rem;font-weight:900}.stage-note{margin-top:.18rem;color:#7f96a8;font-size:.46rem;line-height:1.2}
+.result-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,.72fr);gap:.55rem;margin-top:.7rem}.decision-card{position:relative;overflow:hidden;padding:1rem;border:1px solid #4ee39a66;border-radius:17px;background:radial-gradient(circle at 100% 0,#4ee39a18,transparent 34%),linear-gradient(145deg,#0d3027,#07131e 72%);box-shadow:0 16px 44px #0004}.decision-card.uncertain{border-color:#f2c36e66;background:radial-gradient(circle at 100% 0,#f2c36e18,transparent 34%),linear-gradient(145deg,#352a14,#07131e 72%)}.decision-card.new{border-color:#36c6ee66;background:radial-gradient(circle at 100% 0,#36c6ee18,transparent 34%),linear-gradient(145deg,#0c2d3b,#07131e 72%)}.decision-kicker{color:var(--green);font-size:.53rem;font-weight:950;letter-spacing:.13em}.decision-card.uncertain .decision-kicker{color:var(--amber)}.decision-card.new .decision-kicker{color:var(--cyan)}.decision-main{display:flex;align-items:end;justify-content:space-between;gap:1rem;margin-top:.38rem}.decision-state{font-size:clamp(1.55rem,3vw,2.55rem);font-weight:950;letter-spacing:-.055em;line-height:.95}.decision-id{color:#cfe0e9;font-size:.76rem;font-weight:850}.decision-score{color:var(--green);font-size:1rem;font-weight:950;white-space:nowrap}.decision-card.uncertain .decision-score{color:var(--amber)}.decision-card.new .decision-score{color:var(--cyan)}.decision-note{margin-top:.55rem;color:#9db2c0;font-size:.57rem;line-height:1.4}.reason-box{margin-top:.6rem;padding:.65rem;border:1px solid #36c6ee33;border-radius:11px;background:#36c6ee08}.reason-box b{display:block;color:#a9c9d7;font-size:.5rem;letter-spacing:.09em;text-transform:uppercase}.reason-box span{display:block;margin-top:.24rem;color:#dbe7ed;font-size:.58rem;line-height:1.45;overflow-wrap:anywhere}.score-meter{margin-top:.6rem}.score-meter-head{display:flex;justify-content:space-between;color:#839aab;font-size:.5rem}.score-track{height:6px;margin-top:.3rem;border-radius:999px;background:#142535;overflow:hidden}.score-fill{height:100%;border-radius:999px;background:var(--green)}.decision-card.uncertain .score-fill{background:var(--amber)}.decision-card.new .score-fill{background:var(--cyan)}
+.attribute-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.35rem;margin-top:.55rem}.attribute-card{padding:.5rem;border:1px solid #91a8be18;border-radius:10px;background:#07121ed0}.attribute-card small{display:block;color:#748da1;font-size:.45rem;font-weight:950;text-transform:uppercase}.attribute-card strong{display:block;margin-top:.18rem;color:#e1eaf0;font-size:.56rem;overflow-wrap:anywhere}.attribute-card.missing strong{color:var(--amber)}
+.advisory-panel{padding:.9rem;border:1px solid #b68cff3b;border-radius:17px;background:linear-gradient(145deg,#24163b32,#07111cf5)}.advisory-kicker{color:var(--purple);font-size:.52rem;font-weight:950;letter-spacing:.11em}.advisory-title{margin-top:.22rem;font-size:.84rem;font-weight:950}.advisory-note{margin-top:.25rem;color:#899eae;font-size:.55rem;line-height:1.35}.advisory-summary{margin-top:.6rem;padding:.55rem;border:1px solid #b68cff2d;border-radius:10px;background:#0a101bd0}.advisory-summary strong{color:#d6c5ff;font-size:.55rem}.advisory-summary span{display:block;margin-top:.2rem;color:#a8b8c4;font-size:.54rem;line-height:1.4}.status-chip{display:inline-block;margin-top:.4rem;padding:.25rem .42rem;border:1px solid #b68cff45;border-radius:999px;color:#d5c4ff;font-size:.47rem;font-weight:900}
+.detail-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(230px,.65fr);gap:.55rem;margin-top:.55rem}.detail-card{padding:.8rem;border:1px solid var(--line);border-radius:15px;background:#07121edb}.detail-title{font-size:.72rem;font-weight:950}.detail-note{margin-top:.18rem;color:#7f96a8;font-size:.51rem}.verify{display:flex;align-items:center;justify-content:center;min-height:180px;text-align:center}.verify-ring{width:120px;height:120px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:9px solid #2d7559;border-top-color:var(--green);border-right-color:var(--green);box-shadow:0 0 28px #4ee39a15}.verify-ring strong{font-size:1.5rem}.verify-ring span{color:#8ca3b2;font-size:.47rem;margin-top:.08rem}.verify-copy{margin-top:.5rem;color:#9eb2bf;font-size:.55rem;line-height:1.35}
+.impact-map{margin-top:.55rem;padding:.8rem;border:1px solid #36c6ee2e;border-radius:15px;background:linear-gradient(145deg,#0b25364a,#07111bf2)}.impact-flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:.35rem;margin-top:.5rem}.impact-node{padding:.5rem;border:1px solid #91a8be1b;border-radius:9px;background:#07121ed0;text-align:center}.impact-node strong{display:block;font-size:.55rem}.impact-node span{display:block;margin-top:.12rem;color:#71899c;font-size:.46rem}.impact-arrow{color:var(--cyan)}
+.data-table-wrap{margin-top:.5rem;width:100%;overflow:hidden}.data-table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#07131f;font-size:.54rem}.data-table th{padding:.48rem .45rem;text-align:left;background:#101d2b;color:#b8c8d4;border-bottom:1px solid var(--line);font-size:.47rem;font-weight:950;text-transform:uppercase;letter-spacing:.05em}.data-table td{padding:.48rem .45rem;color:#dbe6ec;border-bottom:1px solid #91a8be16;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.35}.data-table tr:last-child td{border-bottom:0}.data-table tr:hover td{background:#36c6ee07}.data-table.candidate th:nth-child(1),.data-table.candidate td:nth-child(1){width:17%}.data-table.candidate th:nth-child(2),.data-table.candidate td:nth-child(2){width:13%}.data-table.candidate th:nth-child(3),.data-table.candidate td:nth-child(3){width:10%}.data-table.candidate th:nth-child(4),.data-table.candidate td:nth-child(4){width:60%}.data-table.advisory th:nth-child(1),.data-table.advisory td:nth-child(1){width:21%}.data-table.advisory th:nth-child(2),.data-table.advisory td:nth-child(2){width:16%}.data-table.advisory th:nth-child(3),.data-table.advisory td:nth-child(3){width:14%}.data-table.advisory th:nth-child(4),.data-table.advisory td:nth-child(4){width:49%}.table-decision{font-weight:950}.table-decision.same{color:var(--green)}.table-decision.uncertain{color:var(--amber)}.table-decision.new{color:var(--cyan)}.score-cell{font-variant-numeric:tabular-nums;color:#b9e9d0;font-weight:850}.explanation-cell{color:#c6d5df!important}.table-empty{padding:.6rem;border:1px dashed var(--line);border-radius:9px;color:#7e95a6;font-size:.54rem}
+.evidence-row{display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.55rem}.evidence-box{padding:.6rem;border:1px solid var(--line);border-radius:11px;background:#07121ed0}.evidence-label{color:#7c96a9;font-size:.47rem;font-weight:950;text-transform:uppercase;letter-spacing:.07em}.evidence-value{margin-top:.25rem;color:#d7e4eb;font-size:.54rem;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
+.advisory-table{margin-top:.55rem}.review-card,.audit-card{margin-top:.55rem;padding:.8rem;border:1px solid #36c6ee2e;border-radius:15px;background:#07121ed0}.review-kicker{color:var(--cyan);font-size:.49rem;font-weight:950;letter-spacing:.1em}.review-title{margin-top:.2rem;font-size:.7rem;font-weight:950}.review-note{margin-top:.18rem;color:#7f96a8;font-size:.52rem;line-height:1.35}
+.stButton button{min-height:2.15rem!important;border-radius:10px!important;background:#091827!important;border:1px solid var(--line)!important;color:#dce7ee!important;font-size:.61rem!important;font-weight:850!important}.stButton button:hover{border-color:#36c6ee99!important;color:#fff!important}.stButton button[kind="primary"]{background:linear-gradient(90deg,#159fce,#36c6ee)!important;border:0!important;color:#03131a!important}textarea{border-radius:10px!important}.stAlert{border-radius:10px!important}.stSelectbox label,.stTextArea label{font-size:.55rem!important;color:#8ea6b7!important}
+@media(max-width:1100px){.result-layout{grid-template-columns:1fr}.trust-row{grid-template-columns:repeat(2,1fr)}.attribute-grid{grid-template-columns:repeat(2,1fr)}.flow{grid-template-columns:repeat(3,1fr)}.stage:not(:last-child):after{display:none}}
+@media(max-width:760px){.block-container{padding:.5rem .4rem 1.5rem}.topbar{display:block}.top-status{display:inline-flex;margin-top:.5rem}.hero{border-radius:17px}.hero-title{font-size:2rem}.trust-row,.detail-grid,.evidence-row{grid-template-columns:1fr}.scenario-buttons{grid-template-columns:1fr}.flow{grid-template-columns:repeat(2,1fr)}.attribute-grid{grid-template-columns:1fr}.decision-main{display:block}.decision-score{margin-top:.4rem}.impact-flow{grid-template-columns:1fr}.impact-arrow{transform:rotate(90deg)}.data-table,.data-table thead,.data-table tbody,.data-table tr,.data-table th,.data-table td{display:block}.data-table thead{display:none}.data-table{border:0;background:transparent}.data-table tr{margin:.4rem 0;border:1px solid var(--line);border-radius:10px;background:#07131f;overflow:hidden}.data-table td{display:grid;grid-template-columns:minmax(7rem,34%) minmax(0,66%);gap:.45rem;padding:.48rem .52rem;border-bottom:1px solid #91a8be16}.data-table td:last-child{border-bottom:0}.data-table td::before{content:attr(data-label);color:#708a9e;font-size:.45rem;font-weight:950;text-transform:uppercase;letter-spacing:.04em}.data-table.candidate th,.data-table.candidate td,.data-table.advisory th,.data-table.advisory td{width:auto!important}}
+@media(max-width:430px){.hero-title{font-size:1.7rem}.flow{grid-template-columns:1fr}.stage{min-height:60px}.stage:not(:last-child):after{display:block;content:"↓";right:50%;top:auto;bottom:-.62rem;transform:translateX(50%)}.data-table td{grid-template-columns:1fr;gap:.16rem}}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
 
 
-def _render_sidebar() -> bool:
+def _table_html(rows: list[dict[str, Any]], kind: str = "default") -> str:
+    if not rows:
+        return '<div class="table-empty">No evidence is available.</div>'
+    headers = list(rows[0].keys())
+    head = "".join(f"<th>{escape(str(header))}</th>" for header in headers)
+    body: list[str] = []
+    for row in rows:
+        cells: list[str] = []
+        for header in headers:
+            value = row.get(header, "")
+            text = f"{value:.3f}" if isinstance(value, float) else _display_value(value)
+            classes: list[str] = []
+            if header == "Decision":
+                decision = str(text).upper()
+                classes = [
+                    "table-decision",
+                    "same" if decision == "SAME" else "uncertain" if decision == "UNCERTAIN" else "new" if decision == "NEW_CANDIDATE" else "",
+                ]
+            if header == "Score" or "Score" in header:
+                classes.append("score-cell")
+            if header in {"Explanation", "Reason"}:
+                classes.append("explanation-cell")
+            class_attr = f' class="{" ".join(c for c in classes if c)}"' if any(classes) else ""
+            cells.append(
+                f'<td data-label="{escape(str(header))}"{class_attr}>{escape(text)}</td>'
+            )
+        body.append("<tr>" + "".join(cells) + "</tr>")
+    extra = f" {kind}" if kind != "default" else ""
+    return (
+        '<div class="data-table-wrap"><table class="data-table'
+        + extra
+        + '"><thead><tr>'
+        + head
+        + "</tr></thead><tbody>"
+        + "".join(body)
+        + "</tbody></table></div>"
+    )
+
+
+def _sidebar() -> bool:
     with st.sidebar:
-        st.markdown('<div class="brand">◆ CPSE MATERIAL<br>HARMONIZATION</div>', unsafe_allow_html=True)
-        st.markdown('<div class="sub">SIH 2026 · Problem Statement 26099</div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-kicker">System Status</div><div class="side-row"><span class="dot-green">●</span> SYSTEM ONLINE</div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-kicker">Analysis Mode</div>', unsafe_allow_html=True)
-        current = st.session_state.get("ai_enabled", False)
-        st.radio("Analysis Mode", ("Hybrid AI", "Deterministic Only"), index=0 if current else 1, key="analysis_mode_selector", label_visibility="collapsed", on_change=lambda: st.session_state.__setitem__("ai_enabled", st.session_state["analysis_mode_selector"] == "Hybrid AI"))
-        ai_enabled = st.session_state.get("ai_enabled", False)
-        st.markdown('<div class="side-kicker">Decision Authority</div><div class="side-row"><span class="dot-green">🛡</span> Deterministic Engine</div>', unsafe_allow_html=True)
-        st.caption("AUTHORITATIVE · final decision source")
-        st.markdown('<div class="side-kicker">AI Services</div><div class="side-row"><span class="dot-purple">🧠</span> Local NLP <span class="side-right">ADVISORY</span></div><div class="side-row"><span class="dot-purple">✦</span> Gemini 2.5 Flash <span class="side-right">LLM · ADVISORY</span></div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-kicker">Data Sources</div><div class="side-row"><span class="dot-green">●</span> Synthetic Material Master <span class="side-right">DEMO</span></div><div class="side-row"><span class="dot-cyan">○</span> SAP / ERP <span class="side-right">READY</span></div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-note">The demo catalog is synthetic. SAP/ERP is integration-ready but no live CPSE connection is claimed.</div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-note">AI advisory is optional. Disabled mode does not invoke Local NLP or Gemini.</div>', unsafe_allow_html=True)
-        st.markdown('<div class="side-kicker">Demo</div><div class="side-note">Use the quick scenarios in the workspace to demonstrate matched, uncertain, and new-candidate outcomes.</div>', unsafe_allow_html=True)
-        return ai_enabled
+        st.markdown(
+            '<div class="brand"><span class="brand-mark">◆</span> CPSE MATERIAL<br>HARMONIZATION</div><div class="sub">SIH 2026 · PS 26099</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="side-kicker">System</div><div class="side-row"><span class="dot-green">●</span>SYSTEM ONLINE</div>',
+            unsafe_allow_html=True,
+        )
+        selected = st.segmented_control(
+            "Analysis mode",
+            ["Deterministic Only", "Hybrid AI"],
+            default="Deterministic Only" if not st.session_state.get("ai_enabled", False) else "Hybrid AI",
+            key="analysis_mode_selector",
+            label_visibility="collapsed",
+            width="stretch",
+        )
+        ai = selected == "Hybrid AI"
+        st.session_state["ai_enabled"] = ai
+        st.markdown(
+            '<div class="side-kicker">Decision authority</div><div class="side-row"><span class="dot-green">◇</span>Deterministic Engine<span class="side-right">AUTHORITATIVE</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="side-kicker">Advisory services</div><div class="side-row"><span class="dot-purple">✦</span>Local NLP<span class="side-right">ADVISORY</span></div><div class="side-row"><span class="dot-purple">✦</span>Gemini 2.5 Flash<span class="side-right">ADVISORY</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="side-kicker">Data source</div><div class="side-row"><span class="dot-green">●</span>Demo material master<span class="side-right">SYNTHETIC</span></div><div class="side-row"><span class="dot-cyan">○</span>SAP / ERP<span class="side-right">BOUNDARY</span></div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="side-note">The demo catalog is synthetic because SIH does not provide a CPSE production catalog. SAP/ERP is shown only as an integration boundary; no live connection is claimed.</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="side-kicker">System status</div><div class="side-row"><span class="dot-green">●</span>Deterministic engine<span class="side-right">READY</span></div><div class="side-row"><span class="dot-purple">●</span>Optional AI layer<span class="side-right">ADVISORY</span></div>',
+            unsafe_allow_html=True,
+        )
+        return ai
 
 
-def _render_header(ai_enabled: bool) -> None:
-    mode = "HYBRID AI" if ai_enabled else "DETERMINISTIC ONLY"
-    st.markdown(f'<div class="hero"><div class="eyebrow">CPSE MATERIAL HARMONIZATION</div><div class="hero-title">CPSE Material Harmonization</div><div class="hero-sub">AI-assisted standardization of legacy CPSE material descriptions into a common canonical material vocabulary.</div><div class="pills"><span class="pill">SIH 2026 · PS 26099</span><span class="pill online">● SYSTEM ONLINE</span><span class="pill">MODE · {mode}</span><span class="pill">CATALOG · SYNTHETIC DEMO DATA</span></div></div>', unsafe_allow_html=True)
-    st.markdown('<div class="decision-banner"><strong>🛡 Decision authority:</strong> deterministic matching is always the final decision source. Local NLP and Gemini provide separate advisory intelligence only.</div>', unsafe_allow_html=True)
+def _header(ai: bool) -> None:
+    mode = "HYBRID AI" if ai else "DETERMINISTIC ONLY"
+    st.markdown(
+        f'<div class="topbar"><div><div class="top-title">Material Harmonization Across CPSEs</div><div class="top-sub">Deterministic · Transparent · Trustworthy</div></div><div class="top-status"><b>●</b> System online · {mode}</div></div>'
+        f'<div class="hero"><div class="eyebrow">CPSE MATERIAL INTELLIGENCE · SIH 2026</div><div class="hero-title">One material. <span>Many codes.</span><br>One trusted identity.</div><div class="hero-sub">AI-assisted standardization of legacy CPSE material descriptions into a common canonical vocabulary — with deterministic technical verification as the final authority.</div><div class="hero-pills"><span class="pill">PS 26099</span><span class="pill online">● SYSTEM ONLINE</span><span class="pill">MODE · {mode}</span><span class="pill">SYNTHETIC DEMO DATA · CLEARLY LABELLED</span></div></div>'
+        '<div class="trust-row"><div class="trust-card primary"><small>Core outcome</small><strong>Legacy descriptions → common material identity</strong></div><div class="trust-card"><small>Decision source</small><strong>Deterministic rules</strong></div><div class="trust-card"><small>AI role</small><strong>Candidate discovery only</strong></div><div class="trust-card"><small>Governance</small><strong>Auditable + reviewable</strong></div></div>',
+        unsafe_allow_html=True,
+    )
 
 
-def _render_architecture() -> None:
-    cols = st.columns(3)
-    cards = (("🛡 DETERMINISTIC ENGINE", "✓ AUTHORITATIVE", "Final decision source", "green"), ("🧠 LOCAL NLP", "● ADVISORY", "Optional local embedding retrieval", "purple"), ("✦ GEMINI 2.5 FLASH", "LLM · ADVISORY", "Candidate reasoning", "purple"))
-    for col, (kicker, main, note, color) in zip(cols, cards):
-        with col:
-            st.markdown(f'<div class="card service-card"><div class="service-kicker">{kicker}</div><div class="service-main {color}">{main}</div><div class="service-note">{note}</div></div>', unsafe_allow_html=True)
-
-
-def _render_input(ai_enabled: bool) -> str:
-    st.markdown('<div class="section-title">Analyze Material</div><div class="input-card">', unsafe_allow_html=True)
-    st.markdown('<div class="input-label">Enter a legacy material description</div>', unsafe_allow_html=True)
-    st.markdown('<div class="scenario-label">Quick scenarios</div>', unsafe_allow_html=True)
-    buttons = st.columns([1, 1, 1.18])
-    for col, (outcome, example) in zip(buttons, DEMO_EXAMPLES.items()):
-        with col:
-            label = "New  \nCandidate" if outcome == "NEW CANDIDATE" else outcome.title()
-            if st.button(label, use_container_width=True, key=f"example_{outcome}"):
-                st.session_state["material_description"] = example
-                st.session_state["analysis_result"] = None
-                st.session_state["pipeline_completed"] = ()
-                st.session_state["pipeline_ai_status"] = None
-                st.session_state["review_action"] = None
-                st.session_state["review_note"] = ""
-                st.rerun()
-    description = st.text_area("Material Description", key="material_description", height=96, placeholder="Gate Valve Carbon Steel 150 50mm Flanged", help="Example: CS GATE VLV 50MM FLG CL150", label_visibility="collapsed")
-    st.markdown('</div>', unsafe_allow_html=True)
-    return description
-
-
-def _render_pipeline(completed: tuple[str, ...] = (), active: str | None = None, container: Any | None = None, ai_enabled: bool = True, ai_state: str | None = None) -> None:
+def _pipeline(
+    done: tuple[str, ...] = (),
+    active: str | None = None,
+    container: Any | None = None,
+    ai: bool = True,
+    ai_state: str | None = None,
+) -> None:
     target = container or st
-    html = '<div class="pipeline"><div class="pipeline-head"><span>Processing Pipeline</span><small>deterministic authority preserved</small></div><div class="flow">'
-    completed_set = set(completed)
-    for num, name, note, key in PIPELINE_STAGES:
-        if key == "ai_advisory" and not ai_enabled:
-            state = "skipped"
-        elif key == "ai_advisory" and ai_state == "unavailable":
-            state = "unavailable"
-        else:
-            state = "done" if key in completed_set else "active" if key == active else ""
+    completed = set(done)
+    html = '<div class="pipeline"><div class="pipeline-head"><span>Processing pipeline</span><small>AI advises · deterministic decides</small></div><div class="flow">'
+    for number, name, note, key in PIPELINE_STAGES:
+        state = (
+            "skipped" if key == "ai_advisory" and not ai
+            else "unavailable" if key == "ai_advisory" and ai_state == "unavailable"
+            else "done" if key in completed
+            else "active" if key == active
+            else ""
+        )
         icon = "—" if state == "skipped" else "⚠" if state == "unavailable" else "✓" if state == "done" else "•" if state == "active" else ""
         stage_note = "Disabled in current mode" if state == "skipped" else "Advisory unavailable" if state == "unavailable" else note
-        html += f'<div class="stage {state}"><span class="stage-icon">{icon}</span><div class="stage-num">{num}</div><div class="stage-name">{name}</div><div class="stage-note">{stage_note}</div></div>'
-    html += '</div></div>'
-    target.markdown(html, unsafe_allow_html=True)
+        html += f'<div class="stage {state}"><span class="stage-icon">{icon}</span><div class="stage-num">{number}</div><div class="stage-name">{name}</div><div class="stage-note">{stage_note}</div></div>'
+    target.markdown(html + "</div></div>", unsafe_allow_html=True)
 
 
-def _decision_class(decision: str) -> str:
-    return "uncertain" if decision == "UNCERTAIN" else "new" if decision == "NEW_CANDIDATE" else ""
-
-
-def _consensus_class(conclusion: str) -> str:
-    return "uncertain" if conclusion == "UNCERTAIN" else "new" if conclusion == "NEW_CANDIDATE" else "unavailable" if conclusion == "UNAVAILABLE" else ""
-
-
-def _render_authority(result: HybridResult | None) -> None:
+def _decision_card(result: HybridResult | None) -> None:
     if result is None:
-        st.markdown('<div class="authority empty-authority"><div class="authority-label">AUTHORITATIVE DECISION</div><div class="authority-id">Awaiting analysis</div><div class="authority-explain">Run a material description to produce the deterministic result.</div></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="decision-card"><div class="decision-kicker">AUTHORITATIVE DECISION</div><div class="decision-state">Awaiting analysis</div><div class="decision-note">Enter a material description and analyze it to produce the deterministic result.</div></div>',
+            unsafe_allow_html=True,
+        )
         return
     mapping = result.mapping_result
-    cid = mapping.canonical_material_id or "Not assigned"
-    decision = mapping.decision
-    score = mapping.score
-    pill = _decision_class(decision)
-    explanation = escape(mapping.explanation or "Final decision produced by deterministic harmonization engine.")
-    st.markdown(f'<div class="authority"><div class="authority-label">✓ AUTHORITATIVE DECISION</div><div class="authority-id">{escape(str(cid))}</div><span class="decision-pill {pill}">{escape(decision)}</span><div class="authority-score">{score:.3f}</div><div class="authority-explain">Deterministic match score<br>{explanation}</div></div>', unsafe_allow_html=True)
-    attrs = result.attributes
-    glance = (("Category", _display_value(getattr(attrs, "category", None))), ("Valve Type", _display_value(getattr(attrs, "valve_type", None))), ("Material", _display_value(getattr(attrs, "material", None))), ("Size (mm)", _display_value(getattr(attrs, "size_mm", None))), ("Pressure Class", _display_value(getattr(attrs, "pressure_class", None))), ("Connection", _display_value(getattr(attrs, "connection", None))))
-    rows = ''.join(f'<div class="glance-row"><span>{escape(k)}</span><span>{escape(v)}</span></div>' for k, v in glance)
-    st.markdown(f'<div class="glance"><div class="glance-title">At a glance attributes</div>{rows}</div>', unsafe_allow_html=True)
+    decision = str(mapping.decision)
+    css_class = "uncertain" if decision == "UNCERTAIN" else "new" if decision == "NEW_CANDIDATE" else ""
+    canonical_id = mapping.canonical_material_id or "Not assigned"
+    score = float(mapping.score)
+    reason = mapping.explanation or "No deterministic explanation was returned."
+    score_pct = max(0, min(100, round(score * 100)))
+    st.markdown(
+        f'<div class="decision-card {css_class}"><div class="decision-kicker">✓ AUTHORITATIVE DECISION</div><div class="decision-main"><div><div class="decision-state">{escape(decision)}</div><div class="decision-id">Canonical material · {escape(str(canonical_id))}</div></div><div class="decision-score">{score:.3f}</div></div><div class="decision-note">The score is the deterministic attribute-comparison score — not an AI probability.</div><div class="score-meter"><div class="score-meter-head"><span>Technical match score</span><span>{score_pct}%</span></div><div class="score-track"><div class="score-fill" style="width:{score_pct}%"></div></div></div><div class="reason-box"><b>Why this decision?</b><span>{escape(reason)}</span></div></div>',
+        unsafe_allow_html=True,
+    )
+    attributes = result.attributes
+    items = []
+    count = 0
+    for label, field_name in KEY_ATTRIBUTES:
+        value = getattr(attributes, field_name, None)
+        if value is not None:
+            count += 1
+        cls = "" if value is not None else "missing"
+        items.append(f'<div class="attribute-card {cls}"><small>{escape(label)}</small><strong>{escape(_display_value(value))}</strong></div>')
+    st.markdown(
+        f'<div class="attribute-grid">{"".join(items)}</div><div class="decision-note" style="margin-top:.45rem">{count}/6 key technical attributes extracted from the input.</div>',
+        unsafe_allow_html=True,
+    )
 
 
-def _render_analysis(result: HybridResult) -> None:
-    st.markdown('<div class="result-section"><div class="result-head"><h2>Evidence &amp; Details</h2><p>Transparent evidence behind the authoritative decision</p></div>', unsafe_allow_html=True)
-    raw = escape(st.session_state.get("material_description", ""))
-    norm = escape(result.normalized_description or "Not provided")
-    transforms = "\n".join(f"✓ {item}" for item in result.normalization_transformations) if result.normalization_transformations else "No transformations reported."
-    st.markdown(f'<div class="evidence-grid"><div class="evidence"><div class="evidence-label">Original Description</div><div class="evidence-value">{raw}</div></div><div class="evidence"><div class="evidence-label">Normalized Description</div><div class="evidence-value">{norm}</div></div><div class="evidence"><div class="evidence-label">Normalization Transformations</div><div class="evidence-value">{escape(transforms)}</div></div><div class="evidence"><div class="evidence-label">Deterministic Explanation</div><div class="evidence-value">{escape(result.mapping_result.explanation or "No explanation reported.")}</div></div></div>', unsafe_allow_html=True)
-    with st.expander("Technical Attributes", expanded=False):
-        st.dataframe(attribute_rows(result.attributes), hide_index=True, use_container_width=True)
-    with st.expander("Deterministic Candidate Evidence", expanded=False):
-        candidates = result.mapping_result.all_candidates
-        if candidates:
-            st.dataframe(candidate_rows(candidates), hide_index=True, use_container_width=True)
-        else:
-            st.caption("No candidate evidence is available.")
-    _render_ai_consensus(result)
-    _render_advisory(result)
-    _render_review(result)
-    _render_audit_trail()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-def _render_ai_consensus(result: HybridResult) -> None:
+def _advisory_summary(result: HybridResult) -> None:
     consensus = result.ai_consensus
-    css_class = _consensus_class(consensus.conclusion)
-    icon = "✓" if consensus.conclusion == "MATCHED" else "⚠" if consensus.conclusion in {"UNCERTAIN", "NEW_CANDIDATE"} else "—"
-    candidate = f"Candidate: {escape(consensus.canonical_material_id)}" if consensus.canonical_material_id else "No canonical candidate established by AI evidence."
     local = ", ".join(consensus.local_candidates) if consensus.local_candidates else "No candidate returned"
     gemini = ", ".join(consensus.gemini_candidates) if consensus.gemini_candidates else "No candidate returned"
-    authority = result.mapping_result
-    authority_id = authority.canonical_material_id or "Not assigned"
-    st.markdown(f'<div class="consensus"><div class="consensus-head"><div class="consensus-title">AI Consensus</div><span class="consensus-pill {css_class}">{icon} {escape(consensus.conclusion)}</span></div><div class="consensus-candidate">{candidate}</div><div class="consensus-reason">{escape(consensus.reason)}</div><div class="consensus-sources"><div class="consensus-source"><div class="consensus-source-label">Local NLP</div><div class="consensus-source-value">Candidates: {escape(local)}<br>Technical evidence is shown below in advisory detail.</div></div><div class="consensus-source"><div class="consensus-source-label">Gemini 2.5 Flash</div><div class="consensus-source-value">Candidates: {escape(gemini)}<br>Structured technical reasoning is shown below in advisory detail.</div></div></div><div class="consensus-authority"><strong>AUTHORITATIVE DECISION:</strong> {escape(authority.decision)} · {escape(str(authority_id))}. AI consensus never overrides this deterministic result.</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="advisory-panel"><div class="advisory-kicker">ADVISORY INTELLIGENCE · REFERENCE ONLY</div><div class="advisory-title">AI candidate evidence</div><div class="advisory-note">AI output is displayed exactly as advisory evidence. It never changes the deterministic decision.</div><div class="advisory-summary"><strong>Local NLP</strong><span>{escape(local)}</span><span class="status-chip">ADVISORY</span></div><div class="advisory-summary"><strong>Gemini 2.5 Flash</strong><span>{escape(gemini)}</span><span class="status-chip">ADVISORY</span></div></div>',
+        unsafe_allow_html=True,
+    )
 
 
-def _render_advisory(result: HybridResult) -> None:
-    local = tuple(x for x in result.ai_candidate_suggestions if x.source == "local_embedding")
-    gemini = tuple(x for x in result.ai_candidate_suggestions if x.source == "gemini")
-    gemini_status = next((status for status in result.ai_statuses if status.component == "llm"), None)
-    local_status = next((status for status in result.ai_statuses if status.component == "local_nlp"), None)
-    st.markdown('<div class="advisory"><div class="advisory-head"><span>AI Advisory</span> · advisory only</div><div class="advisory-note">Gemini values are compatibility scores supplied by Gemini. Local NLP values are cosine similarity. Neither is confidence or probability; neither overrides deterministic authority.</div><div class="advisory-grid"><div class="advisory-card"><div class="advisory-label">🧠 Local NLP · Embedding Retrieval</div></div><div class="advisory-card"><div class="advisory-label">✦ Gemini 2.5 Flash · LLM</div></div></div></div>', unsafe_allow_html=True)
-    cols = st.columns(2)
-    for col, rows, status, score_label in zip(cols, (local, gemini), (local_status, gemini_status), ("Cosine Similarity", "Gemini Compatibility Score")):
-        with col:
-            if rows:
-                st.dataframe(advisory_rows(rows, score_label), hide_index=True, use_container_width=True)
-            elif status is not None and not status.available:
-                st.caption(f"{_friendly_status(status)} — {status.detail}")
-            elif status is not None and status.detail:
-                st.caption(f"No valid candidates returned — {status.detail}")
-            else:
-                st.caption("No valid candidates returned.")
+def _details(result: HybridResult) -> None:
+    raw = escape(st.session_state.get("material_description", ""))
+    normalized = escape(result.normalized_description or "Not provided")
+    transformations = result.normalization_transformations
+    transformation_text = "\n".join("✓ " + item for item in transformations) if transformations else "No transformations reported."
+    st.markdown(
+        f'<div class="evidence-row"><div class="evidence-box"><div class="evidence-label">Legacy input</div><div class="evidence-value">{raw}</div></div><div class="evidence-box"><div class="evidence-label">Normalized description</div><div class="evidence-value">{normalized}</div></div><div class="evidence-box"><div class="evidence-label">Normalization steps</div><div class="evidence-value">{escape(transformation_text)}</div></div><div class="evidence-box"><div class="evidence-label">Deterministic explanation</div><div class="evidence-value">{escape(result.mapping_result.explanation or "No explanation reported.")}</div></div></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="detail-grid">', unsafe_allow_html=True)
+    with st.container():
+        st.markdown('<div class="detail-card"><div class="detail-title">Deterministic evidence</div><div class="detail-note">Authoritative candidate comparison from the existing mapping engine.</div>', unsafe_allow_html=True)
+        candidates = result.mapping_result.all_candidates
+        if candidates:
+            st.markdown(_table_html(candidate_rows(candidates), kind="candidate"), unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="table-empty">No candidate evidence is available.</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    with st.container():
+        extracted = sum(getattr(result.attributes, field, None) is not None for _, field in KEY_ATTRIBUTES)
+        st.markdown('<div class="detail-card verify"><div><div class="verify-ring"><strong>' + str(extracted) + '/6</strong><span>attributes extracted</span></div><div class="verify-copy">Only extracted technical values are used in the summary. Missing values remain missing.</div></div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    cid = result.mapping_result.canonical_material_id or "Not assigned"
+    st.markdown(
+        f'<div class="impact-map"><div class="detail-title">Harmonization path</div><div class="impact-flow"><div class="impact-node"><strong>Legacy description</strong><span>CPSE-specific wording</span></div><div class="impact-arrow">→</div><div class="impact-node"><strong>Technical identity</strong><span>Normalized + verified</span></div><div class="impact-arrow">→</div><div class="impact-node"><strong>{escape(str(cid))}</strong><span>Canonical material ID</span></div></div></div>',
+        unsafe_allow_html=True,
+    )
+    with st.expander("All extracted attributes", expanded=False):
+        st.markdown(_table_html(attribute_rows(result.attributes), kind="attributes"), unsafe_allow_html=True)
+    with st.expander("AI advisory evidence", expanded=False):
+        local = tuple(item for item in result.ai_candidate_suggestions if item.source == "local_embedding")
+        gemini = tuple(item for item in result.ai_candidate_suggestions if item.source == "gemini")
+        st.markdown('<div class="advisory-table">', unsafe_allow_html=True)
+        st.markdown('<div class="detail-title">Local NLP · Embedding Retrieval</div>', unsafe_allow_html=True)
+        if local:
+            st.markdown(_table_html(advisory_rows(local, "Cosine Similarity"), kind="advisory"), unsafe_allow_html=True)
+        else:
+            st.caption("No valid Local NLP candidates returned.")
+        st.markdown('<div class="detail-title" style="margin-top:.8rem">Gemini 2.5 Flash · LLM</div>', unsafe_allow_html=True)
+        if gemini:
+            st.markdown(_table_html(advisory_rows(gemini, "Gemini Compatibility Score"), kind="advisory"), unsafe_allow_html=True)
+            st.caption("Advisory score only — not a probability or authoritative confidence.")
+        else:
+            st.caption("No valid Gemini candidates returned.")
+        st.markdown('</div>', unsafe_allow_html=True)
+    _review(result)
+    _audit()
 
 
-def _render_review(result: HybridResult) -> None:
+def _review(result: HybridResult) -> None:
     suggestions = result.ai_candidate_suggestions
-    candidate_ids = [item.canonical_material_id for item in suggestions]
+    ids = [item.canonical_material_id for item in suggestions]
     deterministic_id = result.mapping_result.canonical_material_id
-    default_selection = deterministic_id if deterministic_id in candidate_ids else (candidate_ids[0] if candidate_ids else "")
-    st.markdown('<div class="review-card"><div class="review-kicker">HUMAN VALIDATION</div><div class="review-title">Review the proposed material mapping</div><div class="review-note">Human actions are recorded for governance. They do not modify the authoritative deterministic result.</div>', unsafe_allow_html=True)
-    if not suggestions:
-        st.caption("No AI candidates are available for human review. The deterministic result remains authoritative.")
+    default = deterministic_id if deterministic_id in ids else (ids[0] if ids else "")
+    st.markdown('<div class="review-card"><div class="review-kicker">HUMAN VALIDATION</div><div class="review-title">Review an advisory candidate</div><div class="review-note">Review actions are recorded for governance and never modify the authoritative deterministic result.</div>', unsafe_allow_html=True)
+    if not ids:
+        st.caption("No advisory candidates are available for human review.")
         st.markdown('</div>', unsafe_allow_html=True)
         return
-    selected = st.selectbox("Candidate to review", candidate_ids, index=candidate_ids.index(default_selection) if default_selection in candidate_ids else 0, key="review_candidate")
-    note = st.text_area("Reviewer note", key="review_note", height=70, placeholder="Explain why the recommendation was approved, rejected, or needs review.")
+    selected = st.selectbox("Candidate", ids, index=ids.index(default) if default in ids else 0, key="review_candidate")
+    note = st.text_area("Reviewer note", key="review_note", height=70, placeholder="Optional review note")
     cols = st.columns(3)
-    actions = (("✓ APPROVE", "APPROVE", "primary"), ("✕ REJECT", "REJECT", "secondary"), ("⚠ REVIEW", "REVIEW", "secondary"))
-    for col, (label, action, kind) in zip(cols, actions):
+    for col, (label, action, kind) in zip(cols, (("✓ APPROVE", "APPROVE", "primary"), ("✕ REJECT", "REJECT", "secondary"), ("⚠ REVIEW", "REVIEW", "secondary"))):
         with col:
             if st.button(label, type=kind, use_container_width=True, key=f"review_{action.lower()}"):
                 event = st.session_state["audit_trail"].record_review(
@@ -331,131 +448,132 @@ def _render_review(result: HybridResult) -> None:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def _render_audit_trail() -> None:
+def _audit() -> None:
     trail = st.session_state.get("audit_trail")
     if not isinstance(trail, AuditTrail) or not trail.events:
         return
-    st.markdown('<div class="audit-card"><div class="audit-title">Audit Trail</div><div class="audit-note">Session-local review history; production storage can be replaced by a governed database.</div></div>', unsafe_allow_html=True)
-    rows = [event.to_dict() for event in reversed(trail.events)]
-    st.dataframe(rows, hide_index=True, use_container_width=True)
+    st.markdown('<div class="audit-card"><div class="review-kicker">AUDIT TRAIL</div><div class="review-title">Session review history</div><div class="review-note">Session-local review history; production storage can be replaced by governed storage.</div>', unsafe_allow_html=True)
+    st.markdown(_table_html([event.to_dict() for event in reversed(trail.events)], kind="audit"), unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
-def _render_status(result: HybridResult | None, ai_enabled: bool) -> None:
-    if result is None and not ai_enabled:
+def _status(result: HybridResult | None, ai: bool) -> None:
+    if result is None and not ai:
         st.caption("AI advisory is disabled; Local NLP and Gemini are not invoked.")
         return
-    statuses = result.ai_statuses if result is not None else tuple(adapter.status() for adapter in _analysis_adapters(True))
+    statuses = result.ai_statuses if result is not None else tuple(item.status() for item in _analysis_adapters(True))
     cols = st.columns(2)
     for col, status, label in zip(cols, statuses, ("Local NLP", "Gemini 2.5 Flash")):
         with col:
-            dot_class = "dot-green" if status.available else "dot-amber"
-            st.markdown(f'<div class="side-row"><span class="{dot_class}">●</span> {label}<span class="side-right">{_friendly_status(status).upper()}</span></div>', unsafe_allow_html=True)
+            cls = "dot-green" if status.available else "dot-amber"
+            st.markdown(f'<div class="side-row"><span class="{cls}">●</span>{label}<span class="side-right">{_friendly_status(status).upper()}</span></div>', unsafe_allow_html=True)
 
 
 def main() -> None:
-    if st is None:  # pragma: no cover
+    if st is None:
         raise RuntimeError("Streamlit is required to run this dashboard. Use: streamlit run app.py")
-    st.set_page_config(page_title="CPSE Material Harmonization", page_icon="◆", layout="wide", initial_sidebar_state="expanded")
-    _inject_styles()
-    st.session_state.setdefault("ai_enabled", False)
-    st.session_state.setdefault("analysis_result", None)
-    st.session_state.setdefault("analysis_mode", None)
-    st.session_state.setdefault("material_description", "")
-    st.session_state.setdefault("pipeline_completed", ())
-    st.session_state.setdefault("pipeline_ai_status", None)
-    st.session_state.setdefault("audit_trail", AuditTrail())
-    st.session_state.setdefault("review_action", None)
-    st.session_state.setdefault("review_note", "")
+    st.set_page_config(page_title="CPSE Material Intelligence", page_icon="◆", layout="wide", initial_sidebar_state="expanded")
+    _css()
+    defaults = (
+        ("ai_enabled", False),
+        ("analysis_result", None),
+        ("analysis_mode", None),
+        ("material_description", ""),
+        ("pipeline_completed", ()),
+        ("pipeline_ai_status", None),
+        ("audit_trail", AuditTrail()),
+        ("review_action", None),
+        ("review_note", ""),
+    )
+    for key, value in defaults:
+        st.session_state.setdefault(key, value)
 
-    ai_enabled = _render_sidebar()
-    previous_result = st.session_state.get("analysis_result")
+    ai = _sidebar()
+    previous = st.session_state.get("analysis_result")
     previous_mode = st.session_state.get("analysis_mode")
-    mode_changed = previous_result is not None and previous_mode is not None and previous_mode != ai_enabled
+    mode_changed = previous is not None and previous_mode is not None and previous_mode != ai
+    _header(ai)
 
-    _render_header(ai_enabled)
-    _render_architecture()
+    st.markdown('<div class="workspace"><div class="section-title">Analyze material</div><div class="card"><div class="input-head"><div><div class="input-title">Analyze a legacy material</div><div class="input-note">Enter a material description or use an example input.</div></div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="scenario-label">Example inputs</div><div class="scenario-buttons">', unsafe_allow_html=True)
+    for outcome, example in DEMO_EXAMPLES.items():
+        button_label = "New candidate" if outcome == "NEW CANDIDATE" else outcome.title()
+        if st.button(button_label, use_container_width=True, key=f"example_{outcome}"):
+            st.session_state.update(material_description=example, analysis_result=None, pipeline_completed=(), pipeline_ai_status=None, review_action=None)
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+    description = st.text_area("Material Description", key="material_description", height=82, placeholder="Gate Valve Carbon Steel 150 50mm Flanged", label_visibility="collapsed")
+    analyze = st.button("Analyze material  →", type="primary", use_container_width=True, key="analyze_main")
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
-    left, center, right = st.columns([1.05, 1.55, 1.05], gap="medium")
-    with left:
-        st.markdown('<div class="section-title">Analysis Workspace</div>', unsafe_allow_html=True)
-        description = _render_input(ai_enabled)
-        analyze = st.button("Analyze Material  →", type="primary", use_container_width=True, key="analyze_main")
-        if analyze:
-            if not description or not description.strip():
+    pipeline_placeholder = st.empty()
+    if not analyze:
+        _pipeline(st.session_state.get("pipeline_completed", ()), None, pipeline_placeholder, ai, st.session_state.get("pipeline_ai_status"))
+
+    if analyze:
+        if not description.strip():
+            st.session_state["analysis_result"] = None
+            st.warning("Material description required. Enter a legacy description to begin.")
+        else:
+            st.session_state.update(analysis_result=None, pipeline_completed=(), pipeline_ai_status=None, review_action=None)
+            _pipeline((), "input", pipeline_placeholder, ai, None)
+            try:
+                def progress(stage: str) -> None:
+                    done = list(st.session_state.get("pipeline_completed", ()))
+                    if stage == "ai_advisory":
+                        _pipeline(tuple(done), "ai_advisory", pipeline_placeholder, ai, None)
+                        return
+                    if stage not in done:
+                        done.append(stage)
+                    st.session_state["pipeline_completed"] = tuple(done)
+                    remaining = next((key for _, _, _, key in PIPELINE_STAGES if key not in done and (key != "ai_advisory" or ai)), None)
+                    _pipeline(tuple(done), remaining, pipeline_placeholder, ai, None)
+
+                catalog = CSVMaterialCatalogSource(CATALOG_PATH).load()
+                result = analyze_material(description, catalog, ai, progress_callback=progress)
+                st.session_state["analysis_result"] = result
+                st.session_state["analysis_mode"] = ai
+                ai_state = "skipped" if not ai else "complete" if any(status.available for status in result.ai_statuses) else "unavailable"
+                completed = [key for _, _, _, key in PIPELINE_STAGES if key != "ai_advisory"]
+                if ai_state == "complete":
+                    completed.insert(4, "ai_advisory")
+                st.session_state.update(pipeline_ai_status=ai_state, pipeline_completed=tuple(completed))
+                st.session_state["audit_trail"].record_analysis(
+                    legacy_material_code=result.legacy_material_code,
+                    input_description=description,
+                    deterministic_decision=result.mapping_result.decision,
+                    deterministic_material_id=result.mapping_result.canonical_material_id,
+                    ai_candidates=tuple(item.canonical_material_id for item in result.ai_candidate_suggestions),
+                )
+                _pipeline(tuple(completed), None, pipeline_placeholder, ai, ai_state)
+                st.rerun()
+            except (OSError, TypeError, ValueError):
                 st.session_state["analysis_result"] = None
-                st.session_state["pipeline_completed"] = ()
-                st.session_state["pipeline_ai_status"] = None
-                st.warning("Material description required. Enter a legacy description to begin.")
-            else:
-                st.session_state["analysis_result"] = None
-                st.session_state["pipeline_completed"] = ()
-                st.session_state["pipeline_ai_status"] = None
-                st.session_state["review_action"] = None
-                pipeline_placeholder = center.empty()
-                _render_pipeline((), "input", pipeline_placeholder, ai_enabled, None)
-                try:
-                    def on_progress(stage: str) -> None:
-                        completed = list(st.session_state.get("pipeline_completed", ()))
-                        if stage == "ai_advisory":
-                            _render_pipeline(tuple(completed), "ai_advisory", pipeline_placeholder, ai_enabled, None)
-                            return
-                        if stage not in completed:
-                            completed.append(stage)
-                        st.session_state["pipeline_completed"] = tuple(completed)
-                        remaining = next((key for _, _, _, key in PIPELINE_STAGES if key not in completed and (key != "ai_advisory" or ai_enabled)), None)
-                        _render_pipeline(tuple(completed), remaining, pipeline_placeholder, ai_enabled, None)
-
-                    catalog_source = CSVMaterialCatalogSource(CATALOG_PATH)
-                    catalog = catalog_source.load()
-                    result = analyze_material(description, catalog, ai_enabled, progress_callback=on_progress)
-                    st.session_state["analysis_result"] = result
-                    st.session_state["analysis_mode"] = ai_enabled
-                    ai_state = None
-                    completed_stages = [stage[3] for stage in PIPELINE_STAGES if stage[3] != "ai_advisory"]
-                    if not ai_enabled:
-                        ai_state = "skipped"
-                    elif any(status.available for status in result.ai_statuses):
-                        ai_state = "complete"
-                        completed_stages.insert(4, "ai_advisory")
-                    else:
-                        ai_state = "unavailable"
-                    st.session_state["pipeline_ai_status"] = ai_state
-                    st.session_state["pipeline_completed"] = tuple(completed_stages)
-                    st.session_state["audit_trail"].record_analysis(
-                        legacy_material_code=result.legacy_material_code,
-                        input_description=description,
-                        deterministic_decision=result.mapping_result.decision,
-                        deterministic_material_id=result.mapping_result.canonical_material_id,
-                        ai_candidates=tuple(item.canonical_material_id for item in result.ai_candidate_suggestions),
-                    )
-                    _render_pipeline(tuple(completed_stages), None, pipeline_placeholder, ai_enabled, ai_state)
-                    st.rerun()
-                except (OSError, TypeError, ValueError):
-                    st.session_state["analysis_result"] = None
-                    st.session_state["pipeline_completed"] = ()
-                    st.session_state["pipeline_ai_status"] = None
-                    st.error("The description could not be processed safely. Please check the input and try again.")
-    with center:
-        if not analyze:
-            _render_pipeline(st.session_state.get("pipeline_completed", ()), None, None, ai_enabled, st.session_state.get("pipeline_ai_status"))
-        if mode_changed:
-            st.warning("Analysis mode changed. Re-analyze to generate evidence for the current mode.")
-        if previous_result is None:
-            st.markdown('<div class="card" style="margin-top:.8rem;min-height:160px"><div class="service-kicker">WORKFLOW READY</div><div class="service-main">Deterministic engine ready</div><div class="service-note">Input → normalize → extract → match → optional AI advisory → authoritative decision.</div></div>', unsafe_allow_html=True)
-    with right:
-        _render_authority(previous_result)
+                st.error("The description could not be processed safely. Please check the input and try again.")
 
     result = st.session_state.get("analysis_result")
-    if mode_changed and result is not None and st.session_state.get("analysis_mode") != ai_enabled:
-        st.session_state["analysis_result"] = None
+    if mode_changed:
+        st.warning("Analysis mode changed. Re-analyze to generate evidence for the current mode.")
         result = None
-    if result is not None:
-        st.divider()
-        _render_analysis(result)
-        st.markdown('<div class="section-title" style="margin-top:1rem">Service Status</div>', unsafe_allow_html=True)
-        _render_status(result, ai_enabled)
+        st.session_state["analysis_result"] = None
+
+    if result is None:
+        st.markdown('<div class="card" style="margin-top:.6rem"><div class="section-title" style="margin:0">Workflow</div><div class="input-title">Ready for a governed material decision</div><div class="input-note" style="margin-top:.25rem">Input → normalize → extract → match → optional advisory → authoritative decision.</div></div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="footer">CPSE MATERIAL HARMONIZATION · SIH 2026 · PS 26099 · Deterministic Decision Engine · Optional AI Advisory Layer</div>', unsafe_allow_html=True)
+        st.markdown('<div class="result-layout">', unsafe_allow_html=True)
+        st.markdown('<div>', unsafe_allow_html=True)
+        _decision_card(result)
+        _details(result)
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('<div>', unsafe_allow_html=True)
+        _advisory_summary(result)
+        st.markdown('<div class="card" style="margin-top:.55rem"><div class="section-title" style="margin:0">Decision authority</div><div class="input-title" style="margin-top:.25rem">Deterministic engine</div><div class="input-note" style="margin-top:.25rem">The authoritative result is calculated from technical attribute comparison. AI evidence is advisory only.</div></div>', unsafe_allow_html=True)
+        st.markdown('</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="workspace"><div class="section-title">Service status</div>', unsafe_allow_html=True)
+        _status(result, ai)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div style="margin-top:1rem;padding:.65rem 0;border-top:1px solid var(--line);color:#60798d;font-size:.5rem">CPSE MATERIAL INTELLIGENCE · SIH 2026 · PS 26099 · Deterministic decision engine · Optional advisory AI layer</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
