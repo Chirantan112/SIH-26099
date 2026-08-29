@@ -1,9 +1,6 @@
 [client]
 toolbarMode = "minimal"
 
-[ui]
-hideTopBar = true
-
 [theme]
 base = "dark"
 primaryColor = "#46c9ef"
@@ -15,4 +12,4 @@ showWidgetBorder = true
 baseFontSize = 17
 
 [layout]
-topPadding = "6rem"
+topPadding = "3.5rem"
