@@ -10,3 +10,6 @@ textColor = "#f5f9fc"
 borderColor = "#29455d"
 showWidgetBorder = true
 baseFontSize = 17
+
+[layout]
+topPadding = "3.5rem"
