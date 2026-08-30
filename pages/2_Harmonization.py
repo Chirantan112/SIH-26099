@@ -57,7 +57,13 @@ except (OSError, csv.Error) as error:
 summary = build_overview(rows)
 
 st.markdown(
-    '<div class="hero"><div class="eyebrow">SIH 2026 · PS 26099 · HARMONIZATION VIEW</div><div class="title">One material. Many legacy codes.</div><div class="copy">A judge-facing view of how the repository-owned synthetic records from different CPSE-style sources converge on a shared canonical material identity. This page visualizes the demo dataset only; it does not claim production CPSE data.</div><span class="pill safe">DETERMINISTIC ENGINE · AUTHORITATIVE</span><span class="pill">SYNTHETIC DEMO DATA</span><span class="pill">NO LIVE CPSE CONNECTOR</span></div>',
+    '<div class="hero"><div class="eyebrow">SIH 2026 · PS 26099 · HARMONIZATION VIEW</div><div class="title">One material. Many legacy codes.</div><div class="copy">A judge-facing view of how repository-owned synthetic records from multiple CPSE-style source labels converge on a shared canonical material identity. The source labels (for example, CPCL, IOCL and NTPC) are synthetic development labels only; this page does not claim official CPSE production or procurement data.</div><span class="pill safe">DETERMINISTIC ENGINE · AUTHORITATIVE</span><span class="pill">SYNTHETIC CPSE-STYLE SOURCES</span><span class="pill">NO LIVE CPSE CONNECTOR</span></div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown('<div class="section">Dataset provenance</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="card"><div class="label">Source</div><div style="margin-top:.22rem;font-size:.65rem;font-weight:900">Synthetic development dataset</div><div style="margin-top:.55rem;color:#9db2c0;font-size:.55rem;line-height:1.5"><b>Purpose:</b> algorithm development, controlled evaluation and demonstration. <b>Official CPSE data:</b> not provided with the problem statement and not used here. <b>CPSE-style labels:</b> synthetic source labels used to simulate cross-organization material-code variation. <b>Production claim:</b> none.</div></div>',
     unsafe_allow_html=True,
 )
 
@@ -65,7 +71,7 @@ st.markdown('<div class="section">Demo dataset at a glance</div>', unsafe_allow_
 metric_cols = st.columns(4)
 for col, label, value in zip(
     metric_cols,
-    ("Legacy records", "Canonical materials", "CPSE-style sources", "Categories"),
+    ("Legacy records", "Canonical materials", "Synthetic CPSE-style sources", "Categories"),
     (summary["records"], summary["canonical_materials"], len(summary["cpse_counts"]), len(summary["category_counts"])),
 ):
     with col:
@@ -76,11 +82,11 @@ flow_cols = st.columns([1, .12, 1, .12, 1])
 for col, content in zip(
     flow_cols,
     (
-        '<div class="node"><strong>CPCL</strong><span>Legacy material descriptions</span></div>',
+        '<div class="node"><strong>Synthetic CPSE-style source A</strong><span>Legacy material descriptions</span></div>',
         '<div class="arrow">→</div>',
         '<div class="node"><strong>Canonical identity</strong><span>Normalized technical attributes</span></div>',
         '<div class="arrow">→</div>',
-        '<div class="node"><strong>IOCL / NTPC</strong><span>Equivalent legacy records</span></div>',
+        '<div class="node"><strong>Synthetic CPSE-style sources B / C</strong><span>Equivalent legacy records</span></div>',
     ),
 ):
     with col:
@@ -100,7 +106,7 @@ st.markdown(
 st.markdown(f'<div class="section">Equivalent legacy records · {len(group)}</div>', unsafe_allow_html=True)
 for row in group:
     st.markdown(
-        f'<div class="record"><div class="record-top"><span class="record-code">{row["legacy_material_code"]}</span><span class="record-cpse">{row["cpse"]}</span></div><div class="record-desc">{row["raw_description"]}</div></div>',
+        f'<div class="record"><div class="record-top"><span class="record-code">{row["legacy_material_code"]}</span><span class="record-cpse">{row["cpse"]} · SYNTHETIC SOURCE LABEL</span></div><div class="record-desc">{row["raw_description"]}</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -108,6 +114,6 @@ st.markdown('<div class="section">Source distribution</div>', unsafe_allow_html=
 source_cols = st.columns(max(1, len(summary["cpse_counts"])))
 for col, (cpse, count) in zip(source_cols, sorted(summary["cpse_counts"].items())):
     with col:
-        st.metric(cpse, count)
+        st.metric(f"{cpse} · synthetic", count)
 
-st.caption("Evidence boundary: this page visualizes the repository-owned synthetic development dataset. It is intended to demonstrate the harmonization workflow, not to represent real CPSE procurement statistics.")
+st.caption("Evidence boundary: this page visualizes the repository-owned synthetic development dataset. CPCL, IOCL, NTPC and similar labels are synthetic source labels for demonstration; they are not official CPSE records or procurement statistics.")
