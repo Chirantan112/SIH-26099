@@ -3,6 +3,8 @@ name: apply-safe-theme-redesign
 on:
   push:
     branches: ["ui/light-dark-redesign"]
+  pull_request:
+    branches: ["main"]
 
 permissions:
   contents: write
@@ -17,18 +19,15 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
 
           p = Path("app.py")
           s = p.read_text(encoding="utf-8")
 
-          # Guardrails: this job is allowed to touch only the presentation layer.
           required = ["def _css() -> None:", "def _sidebar() -> bool:", "def _header(ai: bool) -> None:"]
           for marker in required:
               if marker not in s:
                   raise SystemExit(f"Required UI marker missing: {marker}")
 
-          # Preserve the existing dark CSS byte-for-byte and wrap it with a light-theme override.
           s = s.replace("def _css() -> None:", "def _dark_css() -> None:", 1)
 
           light_css = r'''
@@ -40,7 +39,7 @@ def _css() -> None:
     st.markdown(
         """
 <style>
-/* Dedicated light theme. Every major surface/text role gets an explicit light value. */
+/* Dedicated light theme. Dark-mode text/surfaces are never reused in light mode. */
 .stApp{background:radial-gradient(900px 520px at 86% -12%,rgba(8,127,165,.10),transparent 62%),#f4f7f9!important;color:#172633!important}
 .block-container{color:#172633!important}
 [data-testid="stSidebar"]{background:#ffffff!important;border-right:1px solid #d6e0e7!important;color:#172633!important}
@@ -54,13 +53,9 @@ def _css() -> None:
 .eyebrow{color:#087fa5!important}.hero-title{color:#172633!important}.hero-title span{color:#087fa5!important}.hero-sub{color:#637987!important}
 .pill{background:#ffffff!important;color:#4f6877!important;border-color:#cbdce4!important}.pill.online{color:#16865a!important;border-color:rgba(22,134,90,.28)!important}
 .trust-card.primary strong,.decision-kicker,.decision-score,.table-decision.same{color:#16865a!important}
-.decision-card{background:linear-gradient(145deg,rgba(22,134,90,.08),#ffffff 72%)!important;border-color:rgba(22,134,90,.38)!important}
-.decision-card.uncertain{background:linear-gradient(145deg,rgba(155,101,0,.08),#ffffff 72%)!important;border-color:rgba(155,101,0,.38)!important}
-.decision-card.new{background:linear-gradient(145deg,rgba(8,127,165,.08),#ffffff 72%)!important;border-color:rgba(8,127,165,.38)!important}
-.decision-card.uncertain .decision-kicker,.decision-card.uncertain .decision-score,.table-decision.uncertain{color:#9b6500!important}
-.decision-card.new .decision-kicker,.decision-card.new .decision-score,.table-decision.new{color:#087fa5!important}
-.reason-box,.advisory-summary,.impact-node,.stage,.attribute-card{background:#f7fafc!important;border-color:#d6e0e7!important}.reason-box span{color:#172633!important}
-.score-track{background:#dfe8ed!important}.score-fill{background:#16865a!important}.decision-card.uncertain .score-fill{background:#9b6500!important}.decision-card.new .score-fill{background:#087fa5!important}
+.decision-card{background:linear-gradient(145deg,rgba(22,134,90,.08),#ffffff 72%)!important;border-color:rgba(22,134,90,.38)!important}.decision-card.uncertain{background:linear-gradient(145deg,rgba(155,101,0,.08),#ffffff 72%)!important;border-color:rgba(155,101,0,.38)!important}.decision-card.new{background:linear-gradient(145deg,rgba(8,127,165,.08),#ffffff 72%)!important;border-color:rgba(8,127,165,.38)!important}
+.decision-card.uncertain .decision-kicker,.decision-card.uncertain .decision-score,.table-decision.uncertain{color:#9b6500!important}.decision-card.new .decision-kicker,.decision-card.new .decision-score,.table-decision.new{color:#087fa5!important}
+.reason-box,.advisory-summary,.impact-node,.stage,.attribute-card{background:#f7fafc!important;border-color:#d6e0e7!important}.reason-box span{color:#172633!important}.score-track{background:#dfe8ed!important}.score-fill{background:#16865a!important}.decision-card.uncertain .score-fill{background:#9b6500!important}.decision-card.new .score-fill{background:#087fa5!important}
 .advisory-panel{background:linear-gradient(145deg,rgba(112,81,174,.07),#ffffff)!important;border-color:rgba(112,81,174,.30)!important}.advisory-kicker,.advisory-summary strong,.status-chip{color:#7051ae!important}
 .stButton button{background:#ffffff!important;color:#172633!important;border-color:#d6e0e7!important}.stButton button:hover{border-color:rgba(8,127,165,.55)!important}.stButton button[kind="primary"]{background:#087fa5!important;color:#ffffff!important;border-color:#087fa5!important}
 [data-baseweb="textarea"]>div,[data-baseweb="input"]>div{background:#ffffff!important;border-color:#d6e0e7!important}[data-baseweb="textarea"] textarea{color:#172633!important}input,textarea{color:#172633!important}
@@ -79,50 +74,45 @@ def _css() -> None:
           css_end = s.index("\ndef _table", s.index("def _dark_css() -> None:"))
           s = s[:css_end] + light_css + s[css_end:]
 
-          # Add the appearance control without touching analysis behavior.
           sidebar_start = s.index("def _sidebar() -> bool:")
           sidebar_end = s.index("\ndef _header(ai: bool) -> None:", sidebar_start)
           sidebar = s[sidebar_start:sidebar_end]
-          if "key=\"dark_mode\"" not in sidebar:
+          if 'key="dark_mode"' not in sidebar:
               needle = "    with st.sidebar:\n"
+              toggle = '''    with st.sidebar:\n        st.markdown(\n            '<div class="theme-switch"><span class="theme-icon">☀️</span><span class="theme-label">APPEARANCE</span><span class="theme-icon">🌙</span></div>',\n            unsafe_allow_html=True,\n        )\n        st.toggle("Dark mode", value=st.session_state.get("dark_mode", True), key="dark_mode", label_visibility="collapsed")\n'''
               if needle not in sidebar:
                   raise SystemExit("Sidebar insertion marker missing")
-              toggle = '''    with st.sidebar:\n        st.markdown(\n            '<div class="theme-switch"><span class="theme-icon">☀️</span><span class="theme-label">APPEARANCE</span><span class="theme-icon">🌙</span></div>',\n            unsafe_allow_html=True,\n        )\n        st.toggle(\"Dark mode\", value=st.session_state.get(\"dark_mode\", True), key=\"dark_mode\", label_visibility=\"collapsed\")\n'''
               sidebar = sidebar.replace(needle, toggle, 1)
               s = s[:sidebar_start] + sidebar + s[sidebar_end:]
 
-          # Make the selected theme available before CSS is emitted. Do not alter pipeline/AI ordering.
-          if 'st.session_state.setdefault("dark_mode", True)' not in s:
-              main_start = s.index("def main() -> None:")
-              main_end = s.index("\nif __name__ ==", main_start)
-              main = s[main_start:main_end]
-              if "_css()\n" in main and "ai = _sidebar()" in main:
-                  main = main.replace("    _css()\n    ai = _sidebar()", "    ai = _sidebar()\n    _css()", 1)
-              else:
-                  raise SystemExit("Could not safely reorder theme rendering")
-              # Existing state initialization block: add one independent UI preference.
-              if 'st.session_state.setdefault("dark_mode", True)' not in main:
-                  anchor = "    st.session_state.setdefault(\"ai_enabled\", False)"
-                  if anchor in main:
-                      main = main.replace(anchor, '    st.session_state.setdefault("dark_mode", True)\n' + anchor, 1)
-                  else:
-                      raise SystemExit("AI state initialization marker missing")
-              s = s[:main_start] + main + s[main_end:]
+          main_start = s.index("def main() -> None:")
+          main_end = s.index("\nif __name__ ==", main_start)
+          main = s[main_start:main_end]
+          if 'st.session_state.setdefault("dark_mode", True)' not in main:
+              anchor = '    st.session_state.setdefault("ai_enabled", False)'
+              if anchor not in main:
+                  raise SystemExit("AI state initialization marker missing")
+              main = main.replace(anchor, '    st.session_state.setdefault("dark_mode", True)\n' + anchor, 1)
+          if "_css()\n    ai = _sidebar()" in main:
+              main = main.replace("    _css()\n    ai = _sidebar()", "    ai = _sidebar()\n    _css()", 1)
+          elif "ai = _sidebar()\n    _css()" not in main:
+              raise SystemExit("Could not safely place theme rendering")
+          s = s[:main_start] + main + s[main_end:]
 
           p.write_text(s, encoding="utf-8")
 
-      - name: Validate syntax and targeted behavior
+      - name: Validate syntax and existing tests
         run: |
           python -m py_compile app.py
           python -m unittest discover -s tests -v
 
-      - name: Commit only the UI change
+      - name: Commit only app.py and remove temporary workflow
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git diff -- app.py
           git diff --name-only
+          git diff -- app.py
           test "$(git diff --name-only)" = "app.py"
           git rm .github/workflows/ui-redesign.yml
           git add app.py
