@@ -279,10 +279,6 @@ def _sidebar() -> bool:
             unsafe_allow_html=True,
         )
         st.markdown(
-            '<div class="side-note">The demo catalog is synthetic because SIH does not provide a CPSE production catalog. SAP/ERP is shown only as an integration boundary; no live connection is claimed.</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
             '<div class="side-kicker">System status</div><div class="side-row"><span class="dot-green">●</span>Deterministic engine<span class="side-right">READY</span></div><div class="side-row"><span class="dot-purple">●</span>Optional AI layer<span class="side-right">ADVISORY</span></div>',
             unsafe_allow_html=True,
         )
