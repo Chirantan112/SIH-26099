@@ -1,0 +1,129 @@
+name: apply-safe-ui-theme
+
+on:
+  push:
+    branches:
+      - ui/light-dark-redesign-safe
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Apply presentation-only patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("app.py")
+          source = path.read_text(encoding="utf-8")
+
+          required = [
+              "def _css() -> None:",
+              "def _sidebar() -> bool:",
+              "return ai\n\n\ndef _header(ai: bool) -> None:",
+              "st.session_state.setdefault(\"ai_enabled\", False)",
+              "    _css()\n    defaults = (",
+          ]
+          for marker in required:
+              if marker not in source:
+                  raise SystemExit(f"Safety check failed: missing exact marker: {marker}")
+
+          if "key=\"dark_mode\"" in source or "def _light_css() -> None:" in source:
+              raise SystemExit("Safety check failed: theme patch appears to have been applied already")
+
+          light_css = r'''
+
+
+def _light_css() -> None:
+    if st.session_state.get("dark_mode", True):
+        return
+    st.markdown(
+        """
+<style>
+/* Light theme is an override layer only. Existing dark CSS remains untouched. */
+.stApp{background:radial-gradient(900px 520px at 82% -12%,rgba(8,127,165,.10),transparent 62%),#f4f7f9!important;color:#172633!important}
+.block-container{color:#172633!important}
+[data-testid="stSidebar"]{background:#ffffff!important;border-right:1px solid #d6e0e7!important;color:#172633!important}
+[data-testid="stSidebar"]>div:first-child{background:#ffffff!important}
+.brand,.top-title,.input-title,.decision-state,.decision-id,.trust-card strong,.attribute-card strong,.stage-name,.detail-title,.review-title,.advisory-title{color:#172633!important}
+.sub,.top-sub,.input-note,.section-title,.scenario-label,.pipeline-head small,.stage-note,.decision-note,.reason-box b,.score-meter-head,.advisory-note,.advisory-summary span,.detail-note,.verify-copy,.review-note,.side-kicker,.side-right,.evidence-label{color:#637987!important}
+.side-row{color:#172633!important;border-bottom-color:#e2e9ee!important}
+.top-status,.card,.trust-card,.pipeline,.stage,.decision-card,.detail-card,.evidence-box,.impact-map,.review-card,.audit-card,.attribute-card{background:#ffffff!important;border-color:#d6e0e7!important;box-shadow:0 10px 28px rgba(31,55,72,.07)!important}
+.top-status{color:#172633!important}
+.hero{background:linear-gradient(135deg,#e6f3f7,#ffffff 72%)!important;border-color:#c7dce5!important;box-shadow:0 20px 55px rgba(31,55,72,.08)!important}
+.eyebrow{color:#087fa5!important}.hero-title{color:#172633!important}.hero-title span{color:#087fa5!important}.hero-sub{color:#637987!important}
+.pill{background:#ffffff!important;color:#4f6877!important;border-color:#cbdce4!important}.pill.online{color:#16865a!important;border-color:rgba(22,134,90,.28)!important}
+.trust-card.primary strong,.decision-kicker,.decision-score,.table-decision.same{color:#16865a!important}
+.decision-card{background:linear-gradient(145deg,rgba(22,134,90,.08),#ffffff 72%)!important;border-color:rgba(22,134,90,.38)!important}
+.decision-card.uncertain{background:linear-gradient(145deg,rgba(155,101,0,.08),#ffffff 72%)!important;border-color:rgba(155,101,0,.38)!important}
+.decision-card.new{background:linear-gradient(145deg,rgba(8,127,165,.08),#ffffff 72%)!important;border-color:rgba(8,127,165,.38)!important}
+.decision-card.uncertain .decision-kicker,.decision-card.uncertain .decision-score,.table-decision.uncertain{color:#9b6500!important}
+.decision-card.new .decision-kicker,.decision-card.new .decision-score,.table-decision.new{color:#087fa5!important}
+.reason-box,.advisory-summary,.impact-node,.stage,.attribute-card{background:#f7fafc!important;border-color:#d6e0e7!important}.reason-box span{color:#172633!important}
+.score-track{background:#dfe8ed!important}.score-fill{background:#16865a!important}.decision-card.uncertain .score-fill{background:#9b6500!important}.decision-card.new .score-fill{background:#087fa5!important}
+.advisory-panel{background:linear-gradient(145deg,rgba(112,81,174,.07),#ffffff)!important;border-color:rgba(112,81,174,.30)!important}.advisory-kicker,.advisory-summary strong,.status-chip{color:#7051ae!important}
+.data-table{background:#ffffff!important;border-color:#d6e0e7!important}.data-table th{background:#eef3f6!important;color:#637987!important;border-color:#d6e0e7!important}.data-table td{color:#172633!important;border-color:#e2e9ee!important}.data-table tr:hover td{background:#eef7fa!important}
+.verify-ring{border-color:#b8d8cc!important;border-top-color:#16865a!important;border-right-color:#16865a!important}.verify-ring span{color:#637987!important}
+.impact-node{background:#f7fafc!important}.impact-arrow{color:#087fa5!important}
+.stButton button{background:#ffffff!important;color:#172633!important;border-color:#d6e0e7!important}.stButton button:hover{border-color:rgba(8,127,165,.55)!important}.stButton button[kind="primary"]{background:#087fa5!important;color:#ffffff!important;border-color:#087fa5!important}
+[data-baseweb="textarea"]>div,[data-baseweb="input"]>div{background:#ffffff!important;border-color:#d6e0e7!important}[data-baseweb="textarea"] textarea{color:#172633!important}input,textarea{color:#172633!important}
+[data-testid="stSegmentedControl"] button{background:#f7fafc!important;color:#172633!important;border-color:#d6e0e7!important}[data-testid="stSegmentedControl"] button[aria-pressed="true"]{background:#e4f2f6!important;color:#087fa5!important;border-color:#087fa5!important}
+.stCaption,.stAlert{color:#172633!important}
+@media(max-width:700px){.hero{border-radius:16px!important}.trust-row{grid-template-columns:1fr 1fr!important}.result-layout{grid-template-columns:1fr!important}}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+'''
+
+          source = source.replace("\n\ndef _sidebar() -> bool:", light_css + "\n\ndef _sidebar() -> bool:", 1)
+
+          sidebar_marker = "        st.markdown(\n            '<div class=\"side-kicker\">System</div><div class=\"side-row\"><span class=\"dot-green\">●</span>SYSTEM ONLINE</div>',\n            unsafe_allow_html=True,\n        )\n"
+          toggle_block = sidebar_marker + '''        st.toggle(
+            "Dark mode",
+            value=st.session_state.get("dark_mode", True),
+            key="dark_mode",
+            help="Switch between the original dark interface and the light presentation theme.",
+        )
+'''
+          if sidebar_marker not in source:
+              raise SystemExit("Safety check failed: sidebar insertion marker changed")
+          source = source.replace(sidebar_marker, toggle_block, 1)
+
+          source = source.replace(
+              '        ("ai_enabled", False),\n',
+              '        ("ai_enabled", False),\n        ("dark_mode", True),\n',
+              1,
+          )
+
+          source = source.replace(
+              "    ai = _sidebar()\n    previous =",
+              "    ai = _sidebar()\n    _light_css()\n    previous =",
+              1,
+          )
+
+          path.write_text(source, encoding="utf-8")
+
+      - name: Validate before committing
+        run: |
+          python -m py_compile app.py
+          python -m unittest discover -s tests -v
+          git diff --check
+          test "$(git diff --name-only)" = "app.py"
+
+      - name: Commit the validated UI-only change and remove this helper
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          git commit -m "feat(ui): add safe light and dark theme toggle"
+          git rm .github/workflows/apply-ui-theme-safe.yml
+          git commit -m "chore(ci): remove temporary UI patch workflow"
+          git push
