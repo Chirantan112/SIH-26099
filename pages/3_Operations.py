@@ -69,6 +69,16 @@ st.set_page_config(page_title="Operations | CPSE Harmonization", page_icon="âš™ï
 st.title("Operations & Evidence")
 st.caption("Batch operations, review queue, audit trail, and judge-facing evidence. Existing decision and LLM modules remain unchanged.")
 
+st.markdown(
+    """
+<style>
+[data-testid="stCaptionContainer"] p,[data-testid="stWidgetLabel"] p,[data-testid="stMarkdownContainer"] p{font-size:14px!important;line-height:1.5}
+[data-testid="stAlert"] p{font-size:14px!important;line-height:1.5}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
 catalog = get_catalog()
 
 single_tab, batch_tab, review_tab, benchmark_tab = st.tabs(["Single Evidence", "Batch Processing", "Review Queue", "Benchmark"])
