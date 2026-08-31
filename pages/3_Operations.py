@@ -50,13 +50,13 @@ def _result_row(result) -> dict[str, object]:
     }
 
 
-def _record_audit(result) -> None:
+def _record_audit(result, raw_description: str | None) -> None:
     trail = create_audit_trail(st.session_state.get("audit_trail"))
     st.session_state.audit_trail = trail
     mapping = result.mapping_result
     trail.record_analysis(
         legacy_material_code=result.legacy_material_code,
-        input_description=result.original_raw_description or "",
+        input_description=raw_description or "",
         deterministic_decision=mapping.decision,
         deterministic_material_id=mapping.canonical_material_id,
         ai_candidates=tuple(
@@ -99,7 +99,7 @@ with single_tab:
         else:
             result = run_demo(description, catalog, legacy_material_code="OPS-INPUT")
         st.session_state.last_result = result
-        _record_audit(result)
+        _record_audit(result, description)
 
     result = st.session_state.get("last_result")
     if result:
