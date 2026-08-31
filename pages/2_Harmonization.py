@@ -46,6 +46,10 @@ st.markdown(
 .card [style*=\"font-size:.55rem\"],.card [style*=\"font-size:.65rem\"]{font-size:14px!important;line-height:1.5!important}
 [data-testid="stCaptionContainer"] p,[data-testid="stWidgetLabel"] p,[data-testid="stMarkdownContainer"] p{font-size:14px!important;line-height:1.5}
 [data-testid="stAlert"] p{font-size:14px!important;line-height:1.5}
+/* Readability weight update: medium body text for dashboard and pages. */
+.sub,.top-sub,.hero-sub,.side-row,.input-note,.scenario-label,.stage-note,.decision-id,.decision-note,.reason-box span,.score-meter-head,.attribute-card strong,.advisory-note,.advisory-summary > span:not(.status-chip),.detail-note,.verify-copy,.impact-node span,.table-empty,.evidence-value,.review-note,.pipeline-head small{font-weight:600!important}
+.stage-name{font-weight:700!important}
+.data-table td{font-weight:600!important}
 </style>
 """,
     unsafe_allow_html=True,
