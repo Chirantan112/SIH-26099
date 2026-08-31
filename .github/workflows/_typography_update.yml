@@ -64,7 +64,6 @@ jobs:
                   text = text.replace("</style>", css + "\n</style>", 1)
                   path.write_text(text, encoding="utf-8")
 
-          # Remove this temporary workflow before committing so the final PR contains only typography changes.
           workflow = Path(".github/workflows/_typography_update.yml")
           workflow.unlink()
           PY
@@ -74,3 +73,6 @@ jobs:
           git add app.py pages/1_Evaluation.py pages/2_Harmonization.py pages/3_Operations.py .github/workflows/_typography_update.yml
           git commit -m "style: standardize site-wide body typography"
           git push origin HEAD:ui-attributes-font-size-16px
+
+          # Keep the branch free of the helper workflow after the generated commit.
+          echo "Typography update complete."
