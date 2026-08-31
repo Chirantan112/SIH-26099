@@ -1,0 +1,42 @@
+name: Apply UI font fix
+
+on:
+  push:
+    branches:
+      - ui-attributes-font-size-16px
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update candidate evidence font size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("app.py")
+          text = p.read_text(encoding="utf-8")
+          old = ".data-table.attributes td{font-size:16px}"
+          new = ".data-table.attributes td,.data-table.candidate td{font-size:16px}"
+          if new not in text:
+              if old not in text:
+                  raise SystemExit("Expected existing attributes font rule was not found")
+              text = text.replace(old, new, 1)
+              p.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit final UI change and remove helper workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/_ui_font_fix.yml
+          git add app.py .github/workflows/_ui_font_fix.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "style: enlarge candidate evidence table text"
+          git push origin HEAD:ui-attributes-font-size-16px
