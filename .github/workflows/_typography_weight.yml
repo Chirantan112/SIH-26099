@@ -1,0 +1,69 @@
+name: Apply site-wide typography weight update
+
+on:
+  push:
+    branches:
+      - ui-attributes-font-size-16px
+
+permissions:
+  contents: write
+
+jobs:
+  typography-weight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply restrained body font weight
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          marker = "/* Site-wide typography weight: readable body text uses a restrained medium weight. */"
+          overrides = {
+              "app.py": """
+/* Site-wide typography weight: readable body text uses a restrained medium weight. */
+.sub,.top-sub,.hero-sub,.side-row,.input-note,.scenario-label,.stage-note,.decision-id,.decision-note,.reason-box span,.score-meter-head,.attribute-card strong,.advisory-note,.advisory-summary > span:not(.status-chip),.detail-note,.verify-copy,.impact-node span,.table-empty,.evidence-value,.review-note{font-weight:500!important}
+.data-table td{font-weight:500!important}
+.data-table th{font-weight:600!important}
+.pill,.top-status{font-weight:600!important}
+.trust-card strong{font-weight:600!important}
+""".strip(),
+              "pages/1_Evaluation.py": """
+/* Site-wide typography weight: readable body text uses a restrained medium weight. */
+.hero-copy,.callout,.metric-note,.case-value{font-weight:500!important}
+[data-testid=\"stCaptionContainer\"] p,[data-testid=\"stWidgetLabel\"] p,[data-testid=\"stMarkdownContainer\"] p{font-weight:500!important}
+""".strip(),
+              "pages/2_Harmonization.py": """
+/* Site-wide typography weight: readable body text uses a restrained medium weight. */
+.copy,.attrs,.node span,.record-desc{font-weight:500!important}
+.card [style*=\"font-size:.55rem\"],.card [style*=\"font-size:.65rem\"]{font-weight:500!important}
+[data-testid=\"stCaptionContainer\"] p,[data-testid=\"stWidgetLabel\"] p,[data-testid=\"stMarkdownContainer\"] p{font-weight:500!important}
+""".strip(),
+              "pages/3_Operations.py": """
+/* Site-wide typography weight: readable body text uses a restrained medium weight. */
+[data-testid=\"stCaptionContainer\"] p,[data-testid=\"stWidgetLabel\"] p,[data-testid=\"stMarkdownContainer\"] p{font-weight:500!important}
+[data-testid=\"stAlert\"] p{font-weight:500!important}
+""".strip(),
+          }
+
+          for filename, css in overrides.items():
+              path = Path(filename)
+              text = path.read_text(encoding="utf-8")
+              if marker not in text:
+                  if text.count("</style>") != 1:
+                      raise SystemExit(f"Unexpected style block count in {filename}")
+                  text = text.replace("</style>", css + "\n</style>", 1)
+                  path.write_text(text, encoding="utf-8")
+
+          workflow = Path(".github/workflows/_typography_weight.yml")
+          workflow.unlink()
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py pages/1_Evaluation.py pages/2_Harmonization.py pages/3_Operations.py .github/workflows/_typography_weight.yml
+          git commit -m "style: strengthen site-wide body typography"
+          git push origin HEAD:ui-attributes-font-size-16px
