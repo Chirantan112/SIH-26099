@@ -45,7 +45,7 @@ st.markdown(
   background: linear-gradient(135deg,#102d43 0%,#07131f 72%); }
 .eyebrow { color:#36c6ee; font-size:.62rem; font-weight:900; letter-spacing:.16em; }
 .hero-title { margin-top:.35rem; font-size:clamp(1.8rem,3.5vw,3rem); font-weight:950; letter-spacing:-.05em; }
-.hero-copy { max-width:900px; margin-top:.55rem; color:#9db2c0; font-size:.78rem; line-height:1.55; }
+.hero-copy { max-width:900px; margin-top:.55rem; color:#9db2c0; font-size:14px; line-height:1.55; }
 .badge { display:inline-block; margin-top:.8rem; margin-right:.35rem; padding:.32rem .55rem;
   border:1px solid #315069; border-radius:999px; color:#cfe0e9; font-size:.52rem; font-weight:900; }
 .badge.safe { color:#4ee39a; border-color:#4ee39a55; }
@@ -53,14 +53,20 @@ st.markdown(
 .metric-card { min-height:100px; padding:.8rem .9rem; border:1px solid #203b53; border-radius:14px; background:#091725; }
 .metric-label { color:#7994a8; font-size:.52rem; font-weight:900; letter-spacing:.09em; text-transform:uppercase; }
 .metric-value { margin-top:.22rem; font-size:1.45rem; font-weight:950; }
-.metric-note { margin-top:.18rem; color:#6f8799; font-size:.48rem; }
-.callout { padding:.8rem .9rem; border:1px solid #36c6ee40; border-radius:14px; background:#36c6ee08; color:#a9c3d0; font-size:.64rem; line-height:1.5; }
+.metric-note { margin-top:.18rem; color:#6f8799; font-size:14px; }
+.callout { padding:.8rem .9rem; border:1px solid #36c6ee40; border-radius:14px; background:#36c6ee08; color:#a9c3d0; font-size:14px; line-height:1.5; }
 .callout strong { color:#eef6fb; }
 .safe-card { padding:.85rem .9rem; border:1px solid #4ee39a40; border-radius:14px; background:#4ee39a08; }
 .danger-card { padding:.85rem .9rem; border:1px solid #ff6f7940; border-radius:14px; background:#ff6f7908; }
 .case-card { padding:.75rem; border:1px solid #203b53; border-radius:12px; background:#08131f; margin-bottom:.45rem; }
 .case-label { color:#7892a5; font-size:.48rem; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
-.case-value { margin-top:.25rem; color:#dce8ee; font-size:.63rem; line-height:1.45; }
+.case-value { margin-top:.25rem; color:#dce8ee; font-size:14px; line-height:1.45; }
+[data-testid="stCaptionContainer"] p,[data-testid="stWidgetLabel"] p,[data-testid="stMarkdownContainer"] p { font-size:14px !important; line-height:1.5; }
+[data-testid="stAlert"] p { font-size:14px !important; line-height:1.5; }
+/* Readability weight update: medium body text for dashboard and pages. */
+.sub,.top-sub,.hero-sub,.side-row,.input-note,.scenario-label,.stage-note,.decision-id,.decision-note,.reason-box span,.score-meter-head,.attribute-card strong,.advisory-note,.advisory-summary > span:not(.status-chip),.detail-note,.verify-copy,.impact-node span,.table-empty,.evidence-value,.review-note,.pipeline-head small{font-weight:600!important}
+.stage-name{font-weight:700!important}
+.data-table td{font-weight:600!important}
 </style>
 """,
     unsafe_allow_html=True,
