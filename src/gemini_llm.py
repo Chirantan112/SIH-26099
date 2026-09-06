@@ -213,10 +213,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 "12. Gemini is advisory only.",
                 "13. The deterministic MappingResult remains authoritative.",
                 "14. Return only supplied canonical material IDs and at most 5 candidates.",
-                "15. Return multiple candidates when the input is ambiguous: normally return the 3 strongest distinct plausible candidates. Do not pad the list with weak or fabricated candidates.",
-                "16. If one candidate is an overwhelming exact technical match and meaningful alternatives are not plausible, returning only that candidate is acceptable.",
-                "17. When multiple candidates are technically or semantically close, include the strongest alternatives even if a technical conflict makes one less suitable; explain the conflict in conflicting_attributes.",
-                "18. Order candidates from strongest to weakest according to the Gemini compatibility assessment, not by catalog position.",
+                "15. Return a JSON array of candidate objects. Each candidate MUST contain canonical_material_id and compatibility_score. reason is optional and should be included when available.",
                 "Return ONLY valid JSON matching the supplied response schema. Do not return confidence, probability, score, or a final decision.",
             ]
         )
