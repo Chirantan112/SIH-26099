@@ -96,7 +96,7 @@ class GeminiLiveDiagnosticsTests(unittest.TestCase):
     def test_streamlit_uses_explicit_advisory_score_labels(self):
         app_source = (Path(__file__).parents[1] / "app.py").read_text(encoding="utf-8")
         self.assertIn('"Cosine Similarity"', app_source)
-        self.assertIn('"Gemini Compatibility · Advisory"', app_source)
+        self.assertIn('"Gemini Compatibility Score"', app_source)
         self.assertNotIn('"Advisory Rank"', app_source)
 
 
