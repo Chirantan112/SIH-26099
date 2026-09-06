@@ -74,6 +74,21 @@ class AIConsensusTests(unittest.TestCase):
         self.assertIsNone(result.ai_consensus.canonical_material_id)
         self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
 
+    def test_ai_claimed_compatibility_cannot_override_deterministic_technical_conflict(self):
+        local = evidence("local_embedding", "VAL-002", True)
+        gemini = evidence("gemini", "VAL-002", True)
+        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL150", CATALOG, retrieval_adapter=RetrievalStub((local,)), llm_adapter=GeminiStub((gemini,)))
+        self.assertEqual(result.ai_consensus.conclusion, "UNCERTAIN")
+        self.assertIsNone(result.ai_consensus.canonical_material_id)
+        self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
+
+    def test_ai_false_positive_cannot_create_new_candidate(self):
+        local = evidence("local_embedding", "VAL-001", False, conflicts=("pressure_class",))
+        gemini = evidence("gemini", "VAL-001", False, conflicts=("pressure_class",))
+        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL150", CATALOG, retrieval_adapter=RetrievalStub((local,)), llm_adapter=GeminiStub((gemini,)))
+        self.assertEqual(result.ai_consensus.conclusion, "UNCERTAIN")
+        self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
+
     def test_missing_critical_attribute_is_unresolved_not_new_candidate(self):
         local = evidence("local_embedding", "VAL-001", None, matching=("category", "valve_type", "material", "size_mm", "connection"), missing=("pressure_class",))
         gemini = evidence("gemini", "VAL-001", None, matching=("category", "valve_type", "material", "size_mm", "connection"), missing=("pressure_class",))
