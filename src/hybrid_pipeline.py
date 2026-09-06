@@ -143,9 +143,10 @@ def _has_explicit_conflict(
     suggestions: tuple[CandidateSuggestion, ...],
     verified: dict[str, bool | None],
 ) -> bool:
-    """Return True only when every supplied candidate is deterministically ruled out."""
+    """Return True only when AI and deterministic evidence both rule out every supplied candidate."""
     return bool(suggestions) and all(
-        verified.get(item.canonical_material_id) is False
+        item.technical_compatible is False
+        and verified.get(item.canonical_material_id) is False
         for item in suggestions
     )
 
@@ -208,7 +209,7 @@ def _ai_consensus(
             return AIConsensus(
                 "NEW_CANDIDATE",
                 None,
-                "Both advisory components supplied only candidates that deterministic technical validation rules out.",
+                "Both advisory components supplied only candidates that they explicitly rule out and deterministic technical validation also rules out.",
                 local_ids,
                 gemini_ids,
             )
@@ -237,7 +238,7 @@ def _ai_consensus(
         return AIConsensus(
             "NEW_CANDIDATE",
             None,
-            "The available advisory component supplied only candidates that deterministic technical validation rules out.",
+            "The available advisory component supplied only candidates that it explicitly rules out and deterministic technical validation also rules out.",
             local_ids,
             gemini_ids,
         )
