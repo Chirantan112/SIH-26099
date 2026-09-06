@@ -125,29 +125,11 @@ def _friendly_status(status: Any) -> str:
     if status.available:
         return "Available"
     detail = (status.detail or "").lower()
-    if any(marker in detail for marker in ("429", "rate limit", "rate-limit", "resource_exhausted", "quota")):
-        return "Currently rate limited"
     if "api key" in detail or "credentials" in detail:
         return "Credentials not configured"
     if "not installed" in detail:
         return "Optional dependency not installed"
-    return "Currently unavailable"
-
-
-def _advisory_status_text(status: Any, candidates: tuple[str, ...]) -> tuple[str, str]:
-    """Render truthful service state separately from candidate evidence."""
-    state = _friendly_status(status)
-    if status.available:
-        if candidates:
-            return ", ".join(candidates), "ADVISORY · AVAILABLE"
-        return "No candidate returned", "ADVISORY · NO CANDIDATE"
-    if state == "Currently rate limited":
-        return "Advisory request was rate limited by the provider.", "CURRENTLY RATE LIMITED"
-    if state == "Credentials not configured":
-        return "Advisory credentials are not configured.", "CONFIGURATION REQUIRED"
-    if state == "Optional dependency not installed":
-        return "Optional advisory dependency is not installed.", "DEPENDENCY UNAVAILABLE"
-    return "Advisory service is currently unavailable.", "CURRENTLY UNAVAILABLE"
+    return "Advisory unavailable"
 
 
 def _analysis_adapters(enabled: bool) -> tuple[Any, Any]:
@@ -377,16 +359,13 @@ def _decision_card(result: HybridResult | None) -> None:
 
 def _advisory_summary(result: HybridResult) -> None:
     consensus = result.ai_consensus
-    local_status, gemini_status = result.ai_statuses
-    local_candidates = consensus.local_candidates
-    gemini_candidates = consensus.gemini_candidates
-    local_text, local_chip = _advisory_status_text(local_status, local_candidates)
-    gemini_text, gemini_chip = _advisory_status_text(gemini_status, gemini_candidates)
+    local = ", ".join(consensus.local_candidates) if consensus.local_candidates else "No candidate returned"
+    gemini = ", ".join(consensus.gemini_candidates) if consensus.gemini_candidates else "No candidate returned"
     consensus_id = consensus.canonical_material_id or "No canonical material assigned"
     consensus_state = consensus.conclusion
     consensus_reason = consensus.reason or "No AI consensus explanation was returned."
     st.markdown(
-        f'<div class="advisory-panel"><div class="advisory-kicker">ADVISORY INTELLIGENCE · REFERENCE ONLY</div><div class="advisory-title">Cross-model advisory consensus</div><div class="advisory-note">Local NLP and Gemini provide separate advisory evidence. The cross-model summary never changes the deterministic decision.</div><div class="advisory-summary"><strong>CROSS-MODEL ADVISORY CONSENSUS</strong><span>{escape(consensus_state)} · {escape(str(consensus_id))}</span><span>{escape(consensus_reason)}</span><span class="status-chip">REFERENCE ONLY</span></div><div class="advisory-summary"><strong>Local NLP</strong><span>{escape(local_text)}</span><span class="status-chip">{escape(local_chip)}</span></div><div class="advisory-summary"><strong>Gemini 2.5 Flash</strong><span>{escape(gemini_text)}</span><span class="status-chip">{escape(gemini_chip)}</span></div></div>',
+        f'<div class="advisory-panel"><div class="advisory-kicker">ADVISORY INTELLIGENCE · REFERENCE ONLY</div><div class="advisory-title">Cross-model advisory consensus</div><div class="advisory-note">Local NLP and Gemini provide separate advisory evidence. The cross-model summary never changes the deterministic decision.</div><div class="advisory-summary"><strong>CROSS-MODEL ADVISORY CONSENSUS</strong><span>{escape(consensus_state)} · {escape(str(consensus_id))}</span><span>{escape(consensus_reason)}</span><span class="status-chip">REFERENCE ONLY</span></div><div class="advisory-summary"><strong>Local NLP</strong><span>{escape(local)}</span><span class="status-chip">ADVISORY</span></div><div class="advisory-summary"><strong>Gemini 2.5 Flash</strong><span>{escape(gemini)}</span><span class="status-chip">ADVISORY</span></div></div>',
         unsafe_allow_html=True,
     )
 
