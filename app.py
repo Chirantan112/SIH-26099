@@ -352,7 +352,7 @@ def _decision_card(result: HybridResult | None) -> None:
         cls = "" if value is not None else "missing"
         items.append(f'<div class="attribute-card {cls}"><small>{escape(label)}</small><strong>{escape(_display_value(value))}</strong></div>')
     st.markdown(
-        f'<div class="attribute-grid">{"".join(items)}</div><div class="decision-note" style="margin-top:.45rem">{count}/6 key technical attributes extracted from the input.</div>',
+        f'<div class="attribute-grid'>{"".join(items)}</div><div class="decision-note" style="margin-top:.45rem">{count}/6 key technical attributes extracted from the input.</div>',
         unsafe_allow_html=True,
     )
 
@@ -365,7 +365,7 @@ def _advisory_summary(result: HybridResult) -> None:
     consensus_state = consensus.conclusion
     consensus_reason = consensus.reason or "No AI consensus explanation was returned."
     st.markdown(
-        f'<div class="advisory-panel"><div class="advisory-kicker">ADVISORY INTELLIGENCE · REFERENCE ONLY</div><div class="advisory-title">AI advisory consensus</div><div class="advisory-note">AI output is displayed as advisory evidence. It never changes the deterministic decision.</div><div class="advisory-summary"><strong>AI + NLP CONSENSUS</strong><span>{escape(consensus_state)} · {escape(str(consensus_id))}</span><span>{escape(consensus_reason)}</span><span class="status-chip">REFERENCE ONLY</span></div><div class="advisory-summary"><strong>Local NLP</strong><span>{escape(local)}</span><span class="status-chip">ADVISORY</span></div><div class="advisory-summary"><strong>Gemini 2.5 Flash</strong><span>{escape(gemini)}</span><span class="status-chip">ADVISORY</span></div></div>',
+        f'<div class="advisory-panel"><div class="advisory-kicker">ADVISORY INTELLIGENCE · REFERENCE ONLY</div><div class="advisory-title">Cross-model advisory consensus</div><div class="advisory-note">Local NLP and Gemini provide separate advisory evidence. The cross-model summary never changes the deterministic decision.</div><div class="advisory-summary"><strong>CROSS-MODEL ADVISORY CONSENSUS</strong><span>{escape(consensus_state)} · {escape(str(consensus_id))}</span><span>{escape(consensus_reason)}</span><span class="status-chip">REFERENCE ONLY</span></div><div class="advisory-summary"><strong>Local NLP</strong><span>{escape(local)}</span><span class="status-chip">ADVISORY</span></div><div class="advisory-summary"><strong>Gemini 2.5 Flash</strong><span>{escape(gemini)}</span><span class="status-chip">ADVISORY</span></div></div>',
         unsafe_allow_html=True,
     )
 
@@ -410,8 +410,8 @@ def _details(result: HybridResult) -> None:
             st.caption("No valid Local NLP candidates returned.")
         st.markdown('<div class="detail-title" style="margin-top:.8rem">Gemini 2.5 Flash · LLM</div>', unsafe_allow_html=True)
         if gemini:
-            st.markdown(_table_html(advisory_rows(gemini, "Gemini Compatibility Score"), kind="advisory"), unsafe_allow_html=True)
-            st.caption("Advisory score only — not a probability or authoritative confidence.")
+            st.markdown(_table_html(advisory_rows(gemini, "Gemini Compatibility · Advisory"), kind="advisory"), unsafe_allow_html=True)
+            st.caption("Advisory compatibility score only — not a probability or authoritative confidence.")
         else:
             st.caption("No valid Gemini candidates returned.")
         st.markdown('</div>', unsafe_allow_html=True)
