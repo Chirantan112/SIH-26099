@@ -361,8 +361,11 @@ def _advisory_summary(result: HybridResult) -> None:
     consensus = result.ai_consensus
     local = ", ".join(consensus.local_candidates) if consensus.local_candidates else "No candidate returned"
     gemini = ", ".join(consensus.gemini_candidates) if consensus.gemini_candidates else "No candidate returned"
+    consensus_id = consensus.canonical_material_id or "No canonical material assigned"
+    consensus_state = consensus.conclusion
+    consensus_reason = consensus.reason or "No AI consensus explanation was returned."
     st.markdown(
-        f'<div class="advisory-panel"><div class="advisory-kicker">ADVISORY INTELLIGENCE · REFERENCE ONLY</div><div class="advisory-title">AI candidate evidence</div><div class="advisory-note">AI output is displayed exactly as advisory evidence. It never changes the deterministic decision.</div><div class="advisory-summary"><strong>Local NLP</strong><span>{escape(local)}</span><span class="status-chip">ADVISORY</span></div><div class="advisory-summary"><strong>Gemini 2.5 Flash</strong><span>{escape(gemini)}</span><span class="status-chip">ADVISORY</span></div></div>',
+        f'<div class="advisory-panel"><div class="advisory-kicker">ADVISORY INTELLIGENCE · REFERENCE ONLY</div><div class="advisory-title">AI advisory consensus</div><div class="advisory-note">AI output is displayed as advisory evidence. It never changes the deterministic decision.</div><div class="advisory-summary"><strong>AI + NLP CONSENSUS</strong><span>{escape(consensus_state)} · {escape(str(consensus_id))}</span><span>{escape(consensus_reason)}</span><span class="status-chip">REFERENCE ONLY</span></div><div class="advisory-summary"><strong>Local NLP</strong><span>{escape(local)}</span><span class="status-chip">ADVISORY</span></div><div class="advisory-summary"><strong>Gemini 2.5 Flash</strong><span>{escape(gemini)}</span><span class="status-chip">ADVISORY</span></div></div>',
         unsafe_allow_html=True,
     )
 
