@@ -352,7 +352,7 @@ def _decision_card(result: HybridResult | None) -> None:
         cls = "" if value is not None else "missing"
         items.append(f'<div class="attribute-card {cls}"><small>{escape(label)}</small><strong>{escape(_display_value(value))}</strong></div>')
     st.markdown(
-        f'<div class="attribute-grid'>{"".join(items)}</div><div class="decision-note" style="margin-top:.45rem">{count}/6 key technical attributes extracted from the input.</div>',
+        f'<div class="attribute-grid">{"".join(items)}</div><div class="decision-note" style="margin-top:.45rem">{count}/6 key technical attributes extracted from the input.</div>',
         unsafe_allow_html=True,
     )
 
