@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 import os
 import unittest
 from unittest.mock import patch
@@ -17,6 +18,22 @@ CATALOG = (
     CatalogRecord("VAL-001", extract_attributes("CS GATE VLV 50MM FLG CL150").attributes),
     CatalogRecord("VAL-002", extract_attributes("CS GATE VLV 50MM FLG CL300").attributes),
 )
+
+
+def candidate(canonical_id, score, reason="test evidence", compatible=True, matching=("category", "valve_type", "material"), conflicting=(), missing=()):
+    return {
+        "canonical_material_id": canonical_id,
+        "compatibility_score": score,
+        "reason": reason,
+        "matching_attributes": list(matching),
+        "conflicting_attributes": list(conflicting),
+        "missing_attributes": list(missing),
+        "technical_compatible": compatible,
+    }
+
+
+def payload(*items):
+    return json.dumps({"candidates": list(items)})
 
 
 class FakeResponse:
@@ -52,9 +69,9 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         else:
             os.environ["GEMINI_API_KEY"] = self.previous_key
 
-    def _adapter(self, payload, factory_calls=None, error=None, status="completed"):
+    def _adapter(self, response_payload, factory_calls=None, error=None, status="completed"):
         interactions = FakeInteractions(
-            FakeResponse(payload, status=status) if payload is not None else None,
+            FakeResponse(response_payload, status=status) if response_payload is not None else None,
             error=error,
         )
 
@@ -86,7 +103,7 @@ class GeminiLLMAdapterTests(unittest.TestCase):
 
     def test_client_initialization_is_lazy(self):
         calls = []
-        adapter, interactions = self._adapter('{"candidates": []}', factory_calls=calls)
+        adapter, interactions = self._adapter(payload(), factory_calls=calls)
         self.assertEqual(calls, [])
         adapter.status()
         self.assertEqual(calls, [])
@@ -95,7 +112,7 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertEqual(len(interactions.calls), 1)
 
     def test_successful_structured_response(self):
-        adapter, interactions = self._adapter('{"candidates":[{"canonical_material_id":"VAL-001","compatibility_score":0.94,"reason":"Matching valve specification."}]}')
+        adapter, interactions = self._adapter(payload(candidate("VAL-001", 0.94, "Matching valve specification.")))
         result = adapter.interpret("desc", "desc", object(), CATALOG)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].canonical_material_id, "VAL-001")
@@ -116,48 +133,38 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertIn("canonical_material_id", candidate_schema["properties"])
         self.assertIn("compatibility_score", candidate_schema["properties"])
         self.assertIn("reason", candidate_schema["properties"])
-        self.assertEqual(candidate_schema["required"], ["canonical_material_id", "compatibility_score"])
+        self.assertEqual(
+            candidate_schema["required"],
+            ["canonical_material_id", "compatibility_score", "matching_attributes", "conflicting_attributes", "missing_attributes", "technical_compatible"],
+        )
 
     def test_successful_fenced_json_response_shape(self):
-        payload = """```json
-{
-  "candidates": [
-    {
-      "canonical_material_id": "VAL-001",
-      "compatibility_score": 0.91,
-      "reason": "It is a gate valve."
-    }
-  ]
-}
-```"""
-        adapter, _ = self._adapter(payload)
+        fenced = json.dumps({"candidates": [candidate("VAL-001", 0.91, "It is a gate valve.")]}, indent=2)
+        adapter, _ = self._adapter(f"```json\n{fenced}\n```")
         result = adapter.interpret("CS GATE VLV 50MM FLG CL150", "CS GATE VLV 50MM FLG CL150", object(), CATALOG)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].canonical_material_id, "VAL-001")
         self.assertEqual(result[0].score, 0.91)
         self.assertIn("It is a gate valve.", result[0].explanation)
-        self.assertIn("Matching: none.", result[0].explanation)
+        self.assertIn("Matching: category, valve_type, material.", result[0].explanation)
         self.assertIn("Conflicts: none.", result[0].explanation)
         self.assertIn("Missing: none.", result[0].explanation)
-        self.assertIn("Technically compatible: unknown.", result[0].explanation)
-        self.assertIn("[Gemini Compatibility Score is advisory only; NON-PROBABILISTIC and NON-AUTHORITATIVE.]", result[0].explanation)
-        self.assertEqual(result[0].matching_attributes, ())
+        self.assertIn("Technically compatible: yes.", result[0].explanation)
+        self.assertEqual(result[0].matching_attributes, ("category", "valve_type", "material"))
         self.assertEqual(result[0].conflicting_attributes, ())
         self.assertEqual(result[0].missing_attributes, ())
-        self.assertIsNone(result[0].technical_compatible)
+        self.assertTrue(result[0].technical_compatible)
 
     def test_complete_technical_evidence_is_preserved(self):
-        payload = '{"candidates":[{"canonical_material_id":"VAL-001","compatibility_score":0.96,"reason":"Technical match","matching_attributes":["valve_type=gate","material=carbon steel"],"conflicting_attributes":[],"missing_attributes":["temperature_class"],"technical_compatible":true}]}'
-        adapter, _ = self._adapter(payload)
-        result = adapter.interpret("CS GATE VLV 50MM FLG CL150", "CS GATE VLV 50MM FLG CL150", object(), CATALOG)
+        item = candidate("VAL-001", 0.96, "Technical match", matching=("valve_type=gate", "material=carbon steel"), missing=("temperature_class",))
+        result = self._adapter(payload(item))[0].interpret("CS GATE VLV 50MM FLG CL150", "CS GATE VLV 50MM FLG CL150", object(), CATALOG)
         self.assertEqual(len(result), 1)
-        candidate = result[0]
-        self.assertEqual(candidate.score, 0.96)
-        self.assertEqual(candidate.matching_attributes, ("valve_type=gate", "material=carbon steel"))
-        self.assertEqual(candidate.conflicting_attributes, ())
-        self.assertEqual(candidate.missing_attributes, ("temperature_class",))
-        self.assertTrue(candidate.technical_compatible)
-        self.assertIn("Technically compatible: yes.", candidate.explanation)
+        self.assertEqual(result[0].score, 0.96)
+        self.assertEqual(result[0].matching_attributes, ("valve_type=gate", "material=carbon steel"))
+        self.assertEqual(result[0].conflicting_attributes, ())
+        self.assertEqual(result[0].missing_attributes, ("temperature_class",))
+        self.assertTrue(result[0].technical_compatible)
+        self.assertIn("Technically compatible: yes.", result[0].explanation)
 
     def test_completed_markdown_bullet_list_is_rejected(self):
         adapter, _ = self._adapter("* VAL-001: General category match.\n* VAL-002: Matches gate valve type.")
@@ -168,26 +175,24 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
 
     def test_failed_status_is_rejected_and_unavailable(self):
-        adapter, _ = self._adapter('{"candidates":[]}', status="failed")
+        adapter, _ = self._adapter(payload(), status="failed")
         self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
         self.assertFalse(adapter.status().available)
         self.assertIn("status='failed'", adapter.status().detail)
 
     def test_incomplete_status_is_rejected_and_unavailable(self):
-        adapter, _ = self._adapter('{"candidates":[]}', status="incomplete")
+        adapter, _ = self._adapter(payload(), status="incomplete")
         self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
         self.assertFalse(adapter.status().available)
         self.assertIn("status='incomplete'", adapter.status().detail)
 
     def test_unknown_catalog_ids_are_rejected(self):
-        adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"NOT-IN-CATALOG","compatibility_score":0.99,"reason":"Nope"},{"canonical_material_id":"VAL-001","compatibility_score":0.87,"reason":"Known"}]}')
-        result = adapter.interpret("desc", "desc", object(), CATALOG)
+        result = self._adapter(payload(candidate("NOT-IN-CATALOG", 0.99, "Nope"), candidate("VAL-001", 0.87, "Known")))[0].interpret("desc", "desc", object(), CATALOG)
         self.assertEqual([x.canonical_material_id for x in result], ["VAL-001"])
         self.assertEqual([x.score for x in result], [0.87])
 
     def test_exact_catalog_id_is_accepted(self):
-        adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"VAL-001","compatibility_score":0.88,"reason":"Known exact ID"}]}')
-        result = adapter.interpret("desc", "desc", object(), CATALOG)
+        result = self._adapter(payload(candidate("VAL-001", 0.88, "Known exact ID")))[0].interpret("desc", "desc", object(), CATALOG)
         self.assertEqual([x.canonical_material_id for x in result], ["VAL-001"])
         self.assertEqual(result[0].score, 0.88)
 
@@ -197,16 +202,14 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertFalse(adapter.status().available)
 
     def test_duplicate_ids_are_removed(self):
-        adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"VAL-001","compatibility_score":0.91,"reason":"first"},{"canonical_material_id":"VAL-001","compatibility_score":0.82,"reason":"duplicate"},{"canonical_material_id":"VAL-002","compatibility_score":0.74,"reason":"second"}]}')
-        result = adapter.interpret("desc", "desc", object(), CATALOG)
+        result = self._adapter(payload(candidate("VAL-001", 0.91, "first"), candidate("VAL-001", 0.82, "duplicate"), candidate("VAL-002", 0.74, "second")))[0].interpret("desc", "desc", object(), CATALOG)
         self.assertEqual([x.canonical_material_id for x in result], ["VAL-001", "VAL-002"])
         self.assertEqual([x.score for x in result], [0.91, 0.74])
 
     def test_maximum_five_candidates(self):
         catalog = tuple(CatalogRecord(f"VAL-{i:03d}", CATALOG[0].attributes) for i in range(1, 9))
-        payload = '{"candidates":[' + ','.join(f'{{"canonical_material_id":"VAL-{i:03d}","compatibility_score":{1.0 - i * 0.05},"reason":"reason {i}"}}' for i in range(1, 9)) + ']}'
-        adapter, _ = self._adapter(payload)
-        result = adapter.interpret("desc", "desc", object(), catalog)
+        items = [candidate(f"VAL-{i:03d}", 1.0 - i * 0.05, f"reason {i}") for i in range(1, 9)]
+        result = self._adapter(payload(*items))[0].interpret("desc", "desc", object(), catalog)
         self.assertEqual(len(result), 5)
         self.assertEqual([x.score for x in result], [0.95, 0.9, 0.85, 0.8, 0.75])
 
@@ -217,34 +220,35 @@ class GeminiLLMAdapterTests(unittest.TestCase):
 
     def test_empty_and_none_description_are_safe(self):
         calls = []
-        adapter, interactions = self._adapter('{"candidates": []}', factory_calls=calls)
+        adapter, interactions = self._adapter(payload(), factory_calls=calls)
         self.assertEqual(adapter.interpret("", "", object(), CATALOG), ())
         self.assertEqual(adapter.interpret(None, "", object(), CATALOG), ())
         self.assertEqual(calls, [])
         self.assertEqual(interactions.calls, [])
 
     def test_gemini_scores_are_preserved_and_not_position_based(self):
-        payload = '{"candidates":[{"canonical_material_id":"VAL-002","compatibility_score":0.41,"reason":"second"},{"canonical_material_id":"VAL-001","compatibility_score":0.93,"reason":"first"}]}'
-        adapter, _ = self._adapter(payload)
-        result = adapter.interpret("desc", "desc", object(), CATALOG)
+        result = self._adapter(payload(candidate("VAL-002", 0.41, "second"), candidate("VAL-001", 0.93, "first")))[0].interpret("desc", "desc", object(), CATALOG)
         self.assertEqual([x.score for x in result], [0.41, 0.93])
         self.assertNotEqual(result[0].score, 1.0)
         self.assertNotEqual(result[1].score, 0.8)
         self.assertTrue(all("NON-PROBABILISTIC" in x.explanation for x in result))
 
     def test_missing_gemini_score_is_rejected_honestly(self):
-        adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"VAL-001","reason":"No score supplied"}]}')
-        result = adapter.interpret("desc", "desc", object(), CATALOG)
-        self.assertEqual(result, ())
+        item = candidate("VAL-001", 0.9)
+        del item["compatibility_score"]
+        adapter, _ = self._adapter(payload(item))
+        self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
         self.assertTrue(adapter.status().available)
 
     def test_invalid_gemini_scores_are_rejected(self):
         for raw_score in ("NaN", "1.5", "-0.1", '"high"', "true"):
-            adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"VAL-001","compatibility_score":' + raw_score + ',"reason":"invalid"}]}')
+            item = candidate("VAL-001", 0.9)
+            item["compatibility_score"] = json.loads(raw_score) if raw_score not in ("NaN",) else "NaN"
+            adapter, _ = self._adapter(payload(item))
             self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
 
     def test_mapping_unchanged_when_gemini_succeeds(self):
-        adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"VAL-002","compatibility_score":0.88,"reason":"Advisory only"}]}')
+        adapter, _ = self._adapter(payload(candidate("VAL-002", 0.88, "Advisory only")))
         raw = "CS GATE VLV 50MM FLG CL150"
         expected = map_records((LegacyRecord("CHECK", raw),), CATALOG)[0]
         actual = run_hybrid_pipeline(raw, CATALOG, "CHECK", llm_adapter=adapter).mapping_result
@@ -257,7 +261,7 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertEqual(run_hybrid_pipeline(raw, CATALOG, "CHECK", llm_adapter=adapter).mapping_result, map_records((LegacyRecord("CHECK", raw),), CATALOG)[0])
 
     def test_technical_conflicts_cannot_be_overridden(self):
-        adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"VAL-001","compatibility_score":0.99,"reason":"Gemini suggestion"}]}')
+        adapter, _ = self._adapter(payload(candidate("VAL-001", 0.99, "Gemini suggestion")))
         result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL300", CATALOG, "CHECK", llm_adapter=adapter)
         self.assertEqual(result.mapping_result.canonical_material_id, "VAL-002")
         self.assertEqual(result.mapping_result.decision, "MATCHED")
@@ -269,7 +273,7 @@ class GeminiLLMAdapterTests(unittest.TestCase):
         self.assertIn("GEMINI_API_KEY", source)
 
     def test_no_authoritative_mapping_result_is_returned(self):
-        adapter, _ = self._adapter('{"candidates":[{"canonical_material_id":"VAL-001","compatibility_score":0.9,"reason":"hint"}]}')
+        adapter, _ = self._adapter(payload(candidate("VAL-001", 0.9, "hint")))
         result = adapter.interpret("desc", "desc", object(), CATALOG)
         self.assertIsInstance(result, tuple)
         self.assertTrue(all(isinstance(x, CandidateSuggestion) for x in result))
