@@ -80,6 +80,30 @@ class GeminiLiveDiagnosticsTests(unittest.TestCase):
         self.assertTrue(adapter.status().available)
         self.assertIn("Gemini returned zero candidates.", adapter.status().detail)
 
+    def test_request_schema_requires_technical_evidence_for_consensus(self):
+        captured = {}
+
+        class CapturingInteractions:
+            def create(self, **kwargs):
+                captured["response_format"] = kwargs["response_format"]
+                return FakeResponse('{"candidates":[]}')
+
+        class CapturingClient:
+            interactions = CapturingInteractions()
+
+        adapter = GeminiLLMAdapter(client_factory=lambda _key: CapturingClient())
+        adapter.interpret("desc", "desc", object(), CATALOG)
+        required = captured["response_format"]["schema"]["items"]["required"]
+        for field in (
+            "canonical_material_id",
+            "compatibility_score",
+            "matching_attributes",
+            "conflicting_attributes",
+            "missing_attributes",
+            "technical_compatible",
+        ):
+            self.assertIn(field, required)
+
     def test_api_failure_is_not_reported_as_zero_candidates(self):
         class FailingClient:
             class interactions:
