@@ -111,6 +111,19 @@ def _source_candidates(suggestions: tuple[CandidateSuggestion, ...], source: str
     return tuple(item for item in suggestions if item.source == source)
 
 
+def _evidence_compatible(item: CandidateSuggestion) -> bool:
+    """Interpret an advisor's explicit technical evidence without inventing specs.
+
+    Some Gemini responses omit ``technical_compatible`` while still supplying
+    complete technical evidence. In that case, a candidate with at least one
+    reported match and no reported conflict or missing attribute is treated as
+    compatible. Explicit True/False values always take precedence.
+    """
+    if item.technical_compatible is not None:
+        return item.technical_compatible
+    return bool(item.matching_attributes) and not item.conflicting_attributes and not item.missing_attributes
+
+
 def _has_explicit_conflict(suggestions: tuple[CandidateSuggestion, ...]) -> bool:
     """Return True only when every supplied candidate is explicitly ruled out."""
     return bool(suggestions) and all(
@@ -126,13 +139,13 @@ def _single_advisor_consensus(
     gemini_ids: tuple[str, ...],
 ) -> AIConsensus:
     """Map one advisor's usable evidence to the requested advisory state."""
-    compatible = tuple(item for item in candidates if item.technical_compatible is True)
+    compatible = tuple(item for item in candidates if _evidence_compatible(item))
     if compatible:
         candidate = compatible[0].canonical_material_id
         return AIConsensus(
             "MATCHED",
             candidate,
-            f"Only {source_label} supplied usable advisory evidence; it reports a technically compatible candidate.",
+            f"Only {source_label} supplied usable advisory evidence; its technical evidence supports a compatible candidate.",
             local_ids,
             gemini_ids,
         )
@@ -161,8 +174,8 @@ def _ai_consensus(
     local_status, gemini_status = statuses
     local = _source_candidates(suggestions, "local_embedding")
     gemini = _source_candidates(suggestions, "gemini")
-    local_compatible = tuple(item for item in local if item.technical_compatible is True)
-    gemini_compatible = tuple(item for item in gemini if item.technical_compatible is True)
+    local_compatible = tuple(item for item in local if _evidence_compatible(item))
+    gemini_compatible = tuple(item for item in gemini if _evidence_compatible(item))
     local_ids = tuple(item.canonical_material_id for item in local)
     gemini_ids = tuple(item.canonical_material_id for item in gemini)
 
