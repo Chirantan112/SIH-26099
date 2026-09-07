@@ -16,6 +16,7 @@ from src.attribute_extraction import MaterialAttributes, extract_attributes
 from src.catalog_mapping import CatalogRecord, LegacyRecord, MappingResult, map_records
 from src.llm_interpretation import LLMInterpretationAdapter, UnavailableLLMAdapter
 from src.normalization import normalize_description
+from src.record_linkage import compare_records
 
 
 MAX_AI_CANDIDATE_SUGGESTIONS = 5
@@ -24,7 +25,7 @@ _SuggestionAdapter = TypeVar("_SuggestionAdapter")
 
 @dataclass(frozen=True)
 class AIConsensus:
-    """Explicit advisory conclusion derived only from returned AI evidence."""
+    """Explicit advisory conclusion derived only from AI evidence."""
 
     conclusion: str  # MATCHED, UNCERTAIN, NEW_CANDIDATE, or UNAVAILABLE
     canonical_material_id: str | None
@@ -111,10 +112,36 @@ def _source_candidates(suggestions: tuple[CandidateSuggestion, ...], source: str
     return tuple(item for item in suggestions if item.source == source)
 
 
-def _has_explicit_conflict(suggestions: tuple[CandidateSuggestion, ...]) -> bool:
-    """Return True only when every returned candidate is explicitly ruled out."""
+def _verified_compatibility(
+    attributes: MaterialAttributes,
+    catalog: tuple[CatalogRecord, ...],
+    suggestions: tuple[CandidateSuggestion, ...],
+) -> dict[str, bool | None]:
+    """Independently verify AI candidates against the existing linkage rules."""
+    catalog_by_id = {record.canonical_material_id: record for record in catalog}
+    verified: dict[str, bool | None] = {}
+    for suggestion in suggestions:
+        record = catalog_by_id.get(suggestion.canonical_material_id)
+        if record is None:
+            continue
+        linkage = compare_records(attributes, record.attributes)
+        if linkage.decision == "SAME":
+            verified[suggestion.canonical_material_id] = True
+        elif linkage.decision == "DIFFERENT":
+            verified[suggestion.canonical_material_id] = False
+        else:
+            verified[suggestion.canonical_material_id] = None
+    return verified
+
+
+def _has_explicit_conflict(
+    suggestions: tuple[CandidateSuggestion, ...],
+    verified: dict[str, bool | None],
+) -> bool:
+    """Return True only when AI and independent technical evidence rule out every candidate."""
     return bool(suggestions) and all(
-        item.technical_compatible is False and bool(item.conflicting_attributes)
+        item.technical_compatible is False
+        and verified.get(item.canonical_material_id) is False
         for item in suggestions
     )
 
@@ -122,18 +149,14 @@ def _has_explicit_conflict(suggestions: tuple[CandidateSuggestion, ...]) -> bool
 def _ai_consensus(
     statuses: tuple[AdapterStatus, AdapterStatus],
     suggestions: tuple[CandidateSuggestion, ...],
+    verified: dict[str, bool | None],
 ) -> AIConsensus:
-    """Summarize only evidence actually returned by the advisory adapters.
-
-    This function deliberately does not infer technical compatibility from an AI
-    score, a free-form explanation, an empty result, or missing evidence. A
-    two-source MATCHED consensus means the two independent advisory sources
-    returned the same catalog candidate; it does not turn that agreement into an
-    authoritative technical match.
-    """
+    """Derive conservative consensus from AI candidates plus independent verification."""
     local_status, gemini_status = statuses
     local = _source_candidates(suggestions, "local_embedding")
     gemini = _source_candidates(suggestions, "gemini")
+    local_compatible = tuple(item for item in local if verified.get(item.canonical_material_id) is True)
+    gemini_compatible = tuple(item for item in gemini if verified.get(item.canonical_material_id) is True)
     local_ids = tuple(item.canonical_material_id for item in local)
     gemini_ids = tuple(item.canonical_material_id for item in gemini)
 
@@ -146,58 +169,102 @@ def _ai_consensus(
             gemini_ids,
         )
 
-    local_evidence = local_status.available and bool(local)
-    gemini_evidence = gemini_status.available and bool(gemini)
+    local_evidence_available = local_status.available and bool(local)
+    gemini_evidence_available = gemini_status.available and bool(gemini)
 
-    if local_evidence and gemini_evidence:
-        local_top = local[0].canonical_material_id
-        gemini_top = gemini[0].canonical_material_id
-        if local_top == gemini_top:
+    if local_evidence_available and gemini_evidence_available:
+        if local_compatible and gemini_compatible:
+            if local_compatible[0].canonical_material_id == gemini_compatible[0].canonical_material_id:
+                candidate = local_compatible[0].canonical_material_id
+                return AIConsensus(
+                    "MATCHED",
+                    candidate,
+                    "Local NLP and Gemini identify the same candidate, and independent deterministic technical validation confirms compatibility. AI remains advisory and does not change the authoritative result.",
+                    local_ids,
+                    gemini_ids,
+                )
             return AIConsensus(
-                "MATCHED",
-                local_top,
-                "Local NLP and Gemini independently returned the same catalog candidate. This is advisory AI agreement only; no technical compatibility is inferred from score or explanation.",
+                "UNCERTAIN",
+                None,
+                "Local NLP and Gemini identify different technically compatible candidates; advisory evidence disagrees.",
                 local_ids,
                 gemini_ids,
             )
+
+        if local_compatible or gemini_compatible:
+            return AIConsensus(
+                "UNCERTAIN",
+                None,
+                "One advisory component supplies a technically compatible candidate while the other does not provide matching verified evidence.",
+                local_ids,
+                gemini_ids,
+            )
+
+        if _has_explicit_conflict(local, verified) and _has_explicit_conflict(gemini, verified):
+            return AIConsensus(
+                "NEW_CANDIDATE",
+                None,
+                "Both advisory components supplied only candidates that they explicitly rule out, and independent technical validation also rules them out. No new material identity is fabricated.",
+                local_ids,
+                gemini_ids,
+            )
+
         return AIConsensus(
             "UNCERTAIN",
             None,
-            "Local NLP and Gemini returned different top candidates; advisory evidence disagrees.",
+            "AI evidence is incomplete or unresolved; insufficient verified evidence for a new-candidate conclusion.",
             local_ids,
             gemini_ids,
         )
 
-    if local_evidence:
-        if _has_explicit_conflict(local):
+    if local_evidence_available:
+        compatible = local_compatible
+        if compatible:
+            return AIConsensus(
+                "UNCERTAIN",
+                compatible[0].canonical_material_id,
+                "Only Local NLP returned a candidate independently verified as technically compatible; a single advisory source is insufficient for a strong AI consensus match.",
+                local_ids,
+                gemini_ids,
+            )
+        if _has_explicit_conflict(local, verified):
             return AIConsensus(
                 "NEW_CANDIDATE",
                 None,
-                "Local NLP explicitly rules out every returned candidate with technical conflicts. No new material identity is fabricated.",
+                "Local NLP supplied only candidates with explicit AI conflicts that are also independently ruled out. No new material identity is fabricated.",
                 local_ids,
                 gemini_ids,
             )
         return AIConsensus(
             "UNCERTAIN",
             local[0].canonical_material_id,
-            "Only Local NLP returned usable candidates; a single advisory source is insufficient for an AI consensus match.",
+            "Only Local NLP returned usable candidates, but the available evidence is incomplete or unresolved.",
             local_ids,
             gemini_ids,
         )
 
-    if gemini_evidence:
-        if _has_explicit_conflict(gemini):
+    if gemini_evidence_available:
+        compatible = gemini_compatible
+        if compatible:
+            return AIConsensus(
+                "UNCERTAIN",
+                compatible[0].canonical_material_id,
+                "Only Gemini returned a candidate independently verified as technically compatible; a single advisory source is insufficient for a strong AI consensus match.",
+                local_ids,
+                gemini_ids,
+            )
+        if _has_explicit_conflict(gemini, verified):
             return AIConsensus(
                 "NEW_CANDIDATE",
                 None,
-                "Gemini explicitly rules out every returned candidate with technical conflicts. No new material identity is fabricated.",
+                "Gemini supplied only candidates with explicit AI conflicts that are also independently ruled out. No new material identity is fabricated.",
                 local_ids,
                 gemini_ids,
             )
         return AIConsensus(
             "UNCERTAIN",
             gemini[0].canonical_material_id,
-            "Only Gemini returned usable candidates; a single advisory source is insufficient for an AI consensus match.",
+            "Only Gemini returned usable candidates, but the available evidence is incomplete or unresolved.",
             local_ids,
             gemini_ids,
         )
@@ -205,7 +272,7 @@ def _ai_consensus(
     return AIConsensus(
         "UNCERTAIN",
         None,
-        "AI services are available, but neither returned usable candidate evidence for this input. Empty evidence is not treated as a new-candidate finding.",
+        "AI services are available, but neither returned usable candidate evidence. Empty evidence is not treated as a new-candidate finding.",
         local_ids,
         gemini_ids,
     )
@@ -259,7 +326,8 @@ def run_hybrid_pipeline(
     _report("ai_advisory")
     suggestions = _valid_suggestions(retrieval_suggestions + llm_suggestions, catalog)
     statuses = (retrieval_status, llm_status)
-    consensus = _ai_consensus(statuses, suggestions)
+    verified = _verified_compatibility(extraction.attributes, catalog, suggestions)
+    consensus = _ai_consensus(statuses, suggestions, verified)
     fallback_used = not all(status.available for status in statuses)
     fallback_information = (
         "Deterministic LEGO #2-#5 mapping remains active; unavailable or failed AI adapters were skipped."
