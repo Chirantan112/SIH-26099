@@ -55,70 +55,47 @@ def evidence(source, candidate, compatible, conflicts=()):
 
 class SingleAdvisorConsensusTests(unittest.TestCase):
     def test_both_unavailable_is_unavailable(self):
-        result = run_hybrid_pipeline(
-            "CS GATE VLV 50MM FLG CL150",
-            CATALOG,
-            retrieval_adapter=RetrievalStub(available=False),
-            llm_adapter=GeminiStub(available=False),
-        )
+        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL150", CATALOG, retrieval_adapter=RetrievalStub(available=False), llm_adapter=GeminiStub(available=False))
         self.assertEqual(result.ai_consensus.conclusion, "UNAVAILABLE")
         self.assertIsNone(result.ai_consensus.canonical_material_id)
         self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
 
+    def test_empty_gemini_evidence_does_not_hide_local_match(self):
+        local = evidence("local_embedding", "VAL-001", True)
+        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL150", CATALOG, retrieval_adapter=RetrievalStub((local,)), llm_adapter=GeminiStub(()))
+        self.assertEqual(result.ai_consensus.conclusion, "MATCHED")
+        self.assertEqual(result.ai_consensus.canonical_material_id, "VAL-001")
+        self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
+
     def test_only_local_compatible_is_matched(self):
         local = evidence("local_embedding", "VAL-001", True)
-        result = run_hybrid_pipeline(
-            "CS GATE VLV 50MM FLG CL150",
-            CATALOG,
-            retrieval_adapter=RetrievalStub((local,)),
-            llm_adapter=GeminiStub(available=False),
-        )
+        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL150", CATALOG, retrieval_adapter=RetrievalStub((local,)), llm_adapter=GeminiStub(available=False))
         self.assertEqual(result.ai_consensus.conclusion, "MATCHED")
         self.assertEqual(result.ai_consensus.canonical_material_id, "VAL-001")
         self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
 
     def test_only_local_explicit_conflict_is_new_candidate(self):
         local = evidence("local_embedding", "VAL-001", False, conflicts=("pressure_class",))
-        result = run_hybrid_pipeline(
-            "CS GATE VLV 50MM FLG CL600",
-            CATALOG,
-            retrieval_adapter=RetrievalStub((local,)),
-            llm_adapter=GeminiStub(available=False),
-        )
+        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL600", CATALOG, retrieval_adapter=RetrievalStub((local,)), llm_adapter=GeminiStub(available=False))
         self.assertEqual(result.ai_consensus.conclusion, "NEW_CANDIDATE")
         self.assertIsNone(result.ai_consensus.canonical_material_id)
 
     def test_only_gemini_compatible_is_matched(self):
         gemini = evidence("gemini", "VAL-001", True)
-        result = run_hybrid_pipeline(
-            "CS GATE VLV 50MM FLG CL150",
-            CATALOG,
-            retrieval_adapter=RetrievalStub(available=False),
-            llm_adapter=GeminiStub((gemini,)),
-        )
+        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL150", CATALOG, retrieval_adapter=RetrievalStub(available=False), llm_adapter=GeminiStub((gemini,)))
         self.assertEqual(result.ai_consensus.conclusion, "MATCHED")
         self.assertEqual(result.ai_consensus.canonical_material_id, "VAL-001")
         self.assertEqual(result.mapping_result.canonical_material_id, "VAL-001")
 
     def test_only_gemini_explicit_conflict_is_new_candidate(self):
         gemini = evidence("gemini", "VAL-001", False, conflicts=("pressure_class",))
-        result = run_hybrid_pipeline(
-            "CS GATE VLV 50MM FLG CL600",
-            CATALOG,
-            retrieval_adapter=RetrievalStub(available=False),
-            llm_adapter=GeminiStub((gemini,)),
-        )
+        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG CL600", CATALOG, retrieval_adapter=RetrievalStub(available=False), llm_adapter=GeminiStub((gemini,)))
         self.assertEqual(result.ai_consensus.conclusion, "NEW_CANDIDATE")
         self.assertIsNone(result.ai_consensus.canonical_material_id)
 
     def test_single_advisor_incomplete_evidence_is_uncertain(self):
         local = evidence("local_embedding", "VAL-001", None)
-        result = run_hybrid_pipeline(
-            "CS GATE VLV 50MM FLG",
-            CATALOG,
-            retrieval_adapter=RetrievalStub((local,)),
-            llm_adapter=GeminiStub(available=False),
-        )
+        result = run_hybrid_pipeline("CS GATE VLV 50MM FLG", CATALOG, retrieval_adapter=RetrievalStub((local,)), llm_adapter=GeminiStub(available=False))
         self.assertEqual(result.ai_consensus.conclusion, "UNCERTAIN")
         self.assertIsNone(result.ai_consensus.canonical_material_id)
 
