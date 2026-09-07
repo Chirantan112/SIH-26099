@@ -36,8 +36,9 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
 
     ``compatibility_score`` is supplied by Gemini and preserved as a bounded
     advisory assessment. It is not a calibrated probability or confidence and
-    is never authoritative. Technical evidence fields are optional; omitted
-    evidence is represented as empty/unknown rather than inferred.
+    is never authoritative. Technical evidence fields are required in the
+    structured response so the consensus layer does not have to infer meaning
+    from a score or free-form reason text.
     """
 
     def __init__(
@@ -105,7 +106,14 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                                 "technical_compatible": {"type": "boolean"},
                                 "reason": {"type": "string"},
                             },
-                            "required": ["canonical_material_id", "compatibility_score"],
+                            "required": [
+                                "canonical_material_id",
+                                "compatibility_score",
+                                "matching_attributes",
+                                "conflicting_attributes",
+                                "missing_attributes",
+                                "technical_compatible",
+                            ],
                         },
                     },
                 },
@@ -213,7 +221,8 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 "12. Gemini is advisory only.",
                 "13. The deterministic MappingResult remains authoritative.",
                 "14. Return only supplied canonical material IDs and at most 5 candidates.",
-                "15. Return a JSON array of candidate objects. Each candidate MUST contain canonical_material_id and compatibility_score. reason is optional and should be included when available.",
+                "15. Every candidate MUST contain canonical_material_id, compatibility_score, matching_attributes, conflicting_attributes, missing_attributes, and technical_compatible. reason is optional.",
+                "16. technical_compatible MUST be true only when the supplied technical evidence supports compatibility, false when there is a critical technical conflict, and omitted evidence is not allowed.",
                 "Return ONLY valid JSON matching the supplied response schema. Do not return confidence, probability, score, or a final decision.",
             ]
         )
@@ -283,8 +292,8 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
             if not all(isinstance(value, list) and all(isinstance(x, str) for x in value) for value in (matching, conflicting, missing)):
                 rejected.append(f"{canonical_id}: technical evidence fields must be string arrays")
                 continue
-            if compatible is not None and not isinstance(compatible, bool):
-                rejected.append(f"{canonical_id}: technical_compatible must be boolean or omitted")
+            if not isinstance(compatible, bool):
+                rejected.append(f"{canonical_id}: technical_compatible must be boolean")
                 continue
             if canonical_id not in known_ids:
                 rejected.append(f"{canonical_id}: unknown catalog ID")
@@ -293,7 +302,7 @@ class GeminiLLMAdapter(LLMInterpretationAdapter):
                 rejected.append(f"{canonical_id}: duplicate catalog ID")
                 continue
             seen.add(canonical_id)
-            compatibility_text = "unknown" if compatible is None else ("yes" if compatible else "no")
+            compatibility_text = "yes" if compatible else "no"
             evidence = (
                 f"{reason.strip()} Matching: {', '.join(matching) or 'none'}. "
                 f"Conflicts: {', '.join(conflicting) or 'none'}. "
