@@ -25,9 +25,6 @@ class FakeResponse:
 
 class GeminiLiveDiagnosticsTests(unittest.TestCase):
     def setUp(self):
-        # These tests exercise the adapter's response/diagnostic behavior with
-        # injected fake clients; they must not depend on the developer's real
-        # environment having GEMINI_API_KEY configured.
         self._api_key_patch = patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"})
         self._api_key_patch.start()
         self.addCleanup(self._api_key_patch.stop)
@@ -38,7 +35,7 @@ class GeminiLiveDiagnosticsTests(unittest.TestCase):
 
     def test_real_compatibility_score_is_preserved_exactly(self):
         adapter = self._adapter(
-            '{"candidates":[{"canonical_material_id":"VAL-001","compatibility_score":0.731,"reason":"Technical match"}]}'
+            '{"candidates":[{"canonical_material_id":"VAL-001","compatibility_score":0.731,"matching_attributes":["category","valve_type","material"],"conflicting_attributes":[],"missing_attributes":[],"technical_compatible":true,"reason":"Technical match"}]}'
         )
         result = adapter.interpret("desc", "desc", object(), CATALOG)
         self.assertEqual(len(result), 1)
@@ -47,7 +44,7 @@ class GeminiLiveDiagnosticsTests(unittest.TestCase):
 
     def test_missing_score_is_rejected_without_positional_fallback(self):
         adapter = self._adapter(
-            '{"candidates":[{"canonical_material_id":"VAL-001","reason":"Missing score"}]}'
+            '{"candidates":[{"canonical_material_id":"VAL-001","reason":"Missing score","matching_attributes":["category"],"conflicting_attributes":[],"missing_attributes":[],"technical_compatible":true}]}'
         )
         self.assertEqual(adapter.interpret("desc", "desc", object(), CATALOG), ())
         self.assertTrue(adapter.status().available)
@@ -59,10 +56,10 @@ class GeminiLiveDiagnosticsTests(unittest.TestCase):
     def test_invalid_score_unknown_id_duplicate_and_malformed_candidates_are_diagnosed(self):
         adapter = self._adapter(
             '{"candidates":['
-            '{"canonical_material_id":"VAL-001","compatibility_score":1.2,"reason":"bad"},'
-            '{"canonical_material_id":"UNKNOWN","compatibility_score":0.9,"reason":"unknown"},'
-            '{"canonical_material_id":"VAL-001","compatibility_score":0.9,"reason":"first"},'
-            '{"canonical_material_id":"VAL-001","compatibility_score":0.8,"reason":"duplicate"},'
+            '{"canonical_material_id":"VAL-001","compatibility_score":1.2,"matching_attributes":["category"],"conflicting_attributes":[],"missing_attributes":[],"technical_compatible":true,"reason":"bad"},'
+            '{"canonical_material_id":"UNKNOWN","compatibility_score":0.9,"matching_attributes":["category"],"conflicting_attributes":[],"missing_attributes":[],"technical_compatible":true,"reason":"unknown"},'
+            '{"canonical_material_id":"VAL-001","compatibility_score":0.9,"matching_attributes":["category"],"conflicting_attributes":[],"missing_attributes":[],"technical_compatible":true,"reason":"first"},'
+            '{"canonical_material_id":"VAL-001","compatibility_score":0.8,"matching_attributes":["category"],"conflicting_attributes":[],"missing_attributes":[],"technical_compatible":true,"reason":"duplicate"},'
             '"not-a-candidate"'
             ']}'
         )
@@ -120,10 +117,7 @@ class GeminiLiveDiagnosticsTests(unittest.TestCase):
     def test_streamlit_uses_explicit_advisory_score_labels(self):
         app_source = (Path(__file__).parents[1] / "app.py").read_text(encoding="utf-8")
         self.assertIn('"Cosine Similarity"', app_source)
-        self.assertTrue(
-            '"Gemini Compatibility Score"' in app_source
-            or '"Gemini Compatibility · Advisory"' in app_source
-        )
+        self.assertTrue('"Gemini Compatibility Score"' in app_source or '"Gemini Compatibility · Advisory"' in app_source)
         self.assertNotIn('"Advisory Rank"', app_source)
 
 
