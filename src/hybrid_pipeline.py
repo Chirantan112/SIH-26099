@@ -119,6 +119,40 @@ def _has_explicit_conflict(suggestions: tuple[CandidateSuggestion, ...]) -> bool
     )
 
 
+def _single_advisor_consensus(
+    source_label: str,
+    candidates: tuple[CandidateSuggestion, ...],
+    local_ids: tuple[str, ...],
+    gemini_ids: tuple[str, ...],
+) -> AIConsensus:
+    """Map one available advisor's own evidence to the requested advisory state."""
+    compatible = tuple(item for item in candidates if item.technical_compatible is True)
+    if compatible:
+        candidate = compatible[0].canonical_material_id
+        return AIConsensus(
+            "MATCHED",
+            candidate,
+            f"Only {source_label} is available; its advisory evidence reports a technically compatible candidate.",
+            local_ids,
+            gemini_ids,
+        )
+    if _has_explicit_conflict(candidates):
+        return AIConsensus(
+            "NEW_CANDIDATE",
+            None,
+            f"Only {source_label} is available; it explicitly rules out every supplied candidate with technical conflicts.",
+            local_ids,
+            gemini_ids,
+        )
+    return AIConsensus(
+        "UNCERTAIN",
+        None,
+        f"Only {source_label} is available; its advisory evidence is incomplete or unresolved.",
+        local_ids,
+        gemini_ids,
+    )
+
+
 def _ai_consensus(
     statuses: tuple[AdapterStatus, AdapterStatus],
     suggestions: tuple[CandidateSuggestion, ...],
@@ -141,9 +175,6 @@ def _ai_consensus(
             gemini_ids,
         )
 
-    # Two available components should independently support the same candidate
-    # for a strong MATCHED consensus. Any unresolved or conflicting evidence is
-    # conservative UNCERTAIN rather than a new-material claim.
     if local_status.available and gemini_status.available:
         if local_compatible and gemini_compatible:
             if local_compatible[0].canonical_material_id == gemini_compatible[0].canonical_material_id:
@@ -181,8 +212,6 @@ def _ai_consensus(
                 gemini_ids,
             )
 
-        # Empty, unresolved, missing, or ambiguous evidence does not establish
-        # that the catalog lacks a compatible material.
         return AIConsensus(
             "UNCERTAIN",
             None,
@@ -191,33 +220,9 @@ def _ai_consensus(
             gemini_ids,
         )
 
-    # Only one advisory component is available. A single positive result is not
-    # independent confirmation; it is still advisory and may be incomplete.
-    available = local if local_status.available else gemini
-    compatible = local_compatible if local_status.available else gemini_compatible
-    if compatible:
-        return AIConsensus(
-            "UNCERTAIN",
-            compatible[0].canonical_material_id,
-            "Only one advisory AI component is available; technical evidence is insufficient for a strong MATCHED consensus.",
-            local_ids,
-            gemini_ids,
-        )
-    if _has_explicit_conflict(available):
-        return AIConsensus(
-            "NEW_CANDIDATE",
-            None,
-            "The available advisory component explicitly rules out every supplied candidate with technical conflicts.",
-            local_ids,
-            gemini_ids,
-        )
-    return AIConsensus(
-        "UNCERTAIN",
-        None,
-        "The available advisory evidence is incomplete or unresolved; insufficient evidence for a new-candidate conclusion.",
-        local_ids,
-        gemini_ids,
-    )
+    if local_status.available:
+        return _single_advisor_consensus("Local NLP", local, local_ids, gemini_ids)
+    return _single_advisor_consensus("Gemini", gemini, local_ids, gemini_ids)
 
 
 def run_hybrid_pipeline(
