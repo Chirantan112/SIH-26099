@@ -39,7 +39,7 @@ Deterministic Record Linkage + Catalog Mapping
           AUTHORITATIVE FINAL DECISION
 ```
 
-`run_hybrid_pipeline()` orchestrates the deterministic LEGO #2-#5 flow and optional AI diagnostics. AI output is bounded and validated against the supplied catalog; it never changes the authoritative mapping result.
+`run_hybrid_pipeline()` orchestrates the deterministic matching flow and optional AI diagnostics. AI output is bounded and validated against the supplied catalog; it never changes the authoritative mapping result.
 
 ### Decision boundary
 
@@ -59,6 +59,7 @@ Deterministic Record Linkage + Catalog Mapping
 - the six-stage INPUT -> NORMALIZE -> EXTRACT -> MATCH -> AI ADVISE -> DECIDE pipeline;
 - authoritative decision and technical evidence;
 - separate Local NLP and Gemini advisory sections;
+- cross-model advisory consensus with independent technical validation;
 - graceful unavailable-service and deterministic-fallback states;
 - responsive evidence tables and mobile-friendly presentation.
 
@@ -87,7 +88,7 @@ The benchmark exits non-zero if a generated equivalent description maps to the w
 
 ## Continuous Verification
 
-GitHub Actions now runs the deterministic test suite and synthetic benchmark on Python 3.11 and 3.12 for pushes to the readiness branch and pull requests targeting `main`.
+GitHub Actions runs the deterministic test suite and synthetic benchmark on Python 3.11 and 3.12 for pushes to the readiness branch and pull requests targeting `main`.
 
 Local verification:
 
@@ -113,6 +114,25 @@ Gemini uses `gemini-2.5-flash` for advisory candidate interpretation and technic
 Configure credentials using `GEMINI_API_KEY`. Never commit the credential.
 
 If Gemini is unavailable, missing credentials, or fails, the application safely continues with deterministic matching.
+
+## Technical References
+
+The following references document the established technical foundations used by CATALYST. They are references for the engineering approaches, not evidence of validation on official CPSE production data.
+
+### Semantic Retrieval / Embeddings
+
+- [Sentence Transformers — Semantic Search](https://www.sbert.net/examples/sentence_transformer/applications/semantic-search/README.html) — background on embedding-based semantic retrieval and candidate search.
+
+### LLM Advisory Interpretation
+
+- [Google AI for Developers — Gemini API Models](https://ai.google.dev/gemini-api/docs/models) — official Gemini API model documentation.
+- [Google AI for Developers — Gemini 2.5 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash) — official documentation for the model used by the advisory component.
+
+### Project Evidence
+
+- [SIH-26099 repository](https://github.com/Chirantan112/SIH-26099) — implementation, tests, synthetic evaluation data, benchmark protocol, and dashboard.
+- [`docs/dataset_design.md`](docs/dataset_design.md) — synthetic CPSE-style dataset design and evidence boundary.
+- [`docs/benchmark_protocol.md`](docs/benchmark_protocol.md) — reproducible benchmark methodology and limitations.
 
 ## Human Review & Auditability
 
